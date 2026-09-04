@@ -1,0 +1,95 @@
+using System.IO;
+using SpotifyGameRadio.Core.Config;
+using Xunit;
+
+namespace SpotifyGameRadio.Core.Tests.Config;
+
+public class ConfigStoreTests
+{
+    private static ConfigStore CreateStore(out string tempDir)
+    {
+        tempDir = Path.Combine(Path.GetTempPath(), "sgr-test-" + Path.GetRandomFileName());
+        return new ConfigStore(tempDir);
+    }
+
+    [Fact]
+    public void SaveThenLoad_RoundTripsAllFields()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            var profile = new RadioProfile
+            {
+                Name = "Arma3-Truck",
+                SourceProcessName = "Spotify",
+                OutputDeviceId = "device-123",
+                SourceX = 0.5f,
+                SourceY = -0.2f,
+                SourceZ = 0.4f,
+                HighPassHz = 500f,
+                LowPassHz = 3000f,
+                DistortionDrive = 0.3f,
+                CompressorThresholdDb = -20f,
+                CompressorRatio = 6f,
+                NoiseLevel = 0.1f,
+                WetDryMix = 0.8f,
+                Hotkey = new FreelookHotkey { VirtualKeyCode = 0x12 },
+                MouseSensitivity = 0.2f,
+                MaxYawDegrees = 80f,
+                MaxPitchDegrees = 50f,
+                SpringBackRatePerSecond = 500f
+            };
+
+            store.Save(profile);
+            var loaded = store.Load("Arma3-Truck");
+
+            Assert.Equal(profile.SourceProcessName, loaded.SourceProcessName);
+            Assert.Equal(profile.SourceX, loaded.SourceX);
+            Assert.Equal(profile.HighPassHz, loaded.HighPassHz);
+            Assert.Equal(profile.Hotkey.VirtualKeyCode, loaded.Hotkey.VirtualKeyCode);
+            Assert.Equal(profile.SpringBackRatePerSecond, loaded.SpringBackRatePerSecond);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ListProfiles_ReturnsAllSavedNames()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            store.Save(new RadioProfile { Name = "One" });
+            store.Save(new RadioProfile { Name = "Two" });
+
+            var names = store.ListProfiles();
+
+            Assert.Contains("One", names);
+            Assert.Contains("Two", names);
+            Assert.Equal(2, names.Count);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Delete_RemovesProfile()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            store.Save(new RadioProfile { Name = "Temp" });
+            store.Delete("Temp");
+
+            Assert.DoesNotContain("Temp", store.ListProfiles());
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+}

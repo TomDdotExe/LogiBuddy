@@ -1,0 +1,12 @@
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\bin\Debug\net8.0\SpotifyGameRadio.Core.deps.json
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\bin\Debug\net8.0\SpotifyGameRadio.Core.dll
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\bin\Debug\net8.0\SpotifyGameRadio.Core.pdb
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.csproj.AssemblyReference.cache
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.AssemblyInfoInputs.cache
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.AssemblyInfo.cs
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.csproj.CoreCompileInputs.cache
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.dll
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\refint\SpotifyGameRadio.Core.dll
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\SpotifyGameRadio.Core.pdb
+D:\Freelance Work\SpotifyGameRadio\.claude\worktrees\spotify-game-radio\src\SpotifyGameRadio.Core\obj\Debug\net8.0\ref\SpotifyGameRadio.Core.dll

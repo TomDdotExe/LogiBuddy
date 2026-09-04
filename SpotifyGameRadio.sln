@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{715E0FAF-38F1-4C03-AF9E-75C78A0E8D35}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpotifyGameRadio.Core", "src\SpotifyGameRadio.Core\SpotifyGameRadio.Core.csproj", "{0CE57375-210A-4C7D-A56E-2FA17827B5B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpotifyGameRadio.App", "src\SpotifyGameRadio.App\SpotifyGameRadio.App.csproj", "{910D4076-26B5-4FE8-B73B-B172574F6D18}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{99585310-6B29-4C89-B366-3C6B392C1A3C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpotifyGameRadio.Core.Tests", "tests\SpotifyGameRadio.Core.Tests\SpotifyGameRadio.Core.Tests.csproj", "{A9F975AA-5EB9-48EC-B280-13366E1ADB44}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0CE57375-210A-4C7D-A56E-2FA17827B5B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0CE57375-210A-4C7D-A56E-2FA17827B5B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0CE57375-210A-4C7D-A56E-2FA17827B5B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0CE57375-210A-4C7D-A56E-2FA17827B5B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{910D4076-26B5-4FE8-B73B-B172574F6D18}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{910D4076-26B5-4FE8-B73B-B172574F6D18}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{910D4076-26B5-4FE8-B73B-B172574F6D18}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{910D4076-26B5-4FE8-B73B-B172574F6D18}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A9F975AA-5EB9-48EC-B280-13366E1ADB44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9F975AA-5EB9-48EC-B280-13366E1ADB44}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9F975AA-5EB9-48EC-B280-13366E1ADB44}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9F975AA-5EB9-48EC-B280-13366E1ADB44}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0CE57375-210A-4C7D-A56E-2FA17827B5B2} = {715E0FAF-38F1-4C03-AF9E-75C78A0E8D35}
+		{910D4076-26B5-4FE8-B73B-B172574F6D18} = {715E0FAF-38F1-4C03-AF9E-75C78A0E8D35}
+		{A9F975AA-5EB9-48EC-B280-13366E1ADB44} = {99585310-6B29-4C89-B366-3C6B392C1A3C}
+	EndGlobalSection
+EndGlobal
