@@ -2421,10 +2421,15 @@ namespace SpotifyGameRadio.Core.Tests.Pipeline;
 
 public class FakeCaptureService : IAudioCaptureService
 {
-    public WaveFormat Format { get; } = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
+    public WaveFormat Format { get; }
     public event EventHandler<AudioCaptureStatus>? StatusChanged;
     public event EventHandler<float[]>? DataAvailable;
     public bool Started { get; private set; }
+
+    public FakeCaptureService(int channels = 1)
+    {
+        Format = WaveFormat.CreateIeeeFloatWaveFormat(48000, channels);
+    }
 
     public void Start(string processName) { Started = true; StatusChanged?.Invoke(this, AudioCaptureStatus.Capturing); }
     public void Stop() { Started = false; }
@@ -2531,6 +2536,21 @@ public class RadioPipelineTests
 
         Assert.True(capture.Started);
     }
+
+    [Fact]
+    public void TwoChannelCapture_IsDownmixedToMonoBeforeProcessing()
+    {
+        var capture = new FakeCaptureService(channels: 2);
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+
+        pipeline.Start();
+        // Two stereo frames: (L=1.0, R=0.0) and (L=0.4, R=0.2) -> mono 0.5, 0.3
+        capture.PushSamples(new float[] { 1.0f, 0.0f, 0.4f, 0.2f });
+
+        Assert.Single(output.WrittenBuffers);
+        Assert.Equal(new float[] { 0.5f, 0.5f, 0.3f, 0.3f }, output.WrittenBuffers[0]);
+    }
 }
 ```
 
@@ -2606,18 +2626,23 @@ public class RadioPipeline
         _output.Stop();
     }
 
-    private void OnDataAvailable(object? sender, float[] monoSamples)
+    private void OnDataAvailable(object? sender, float[] interleavedSamples)
     {
         try
         {
-            _tracker.Update(deltaSeconds: monoSamples.Length / (float)_capture.Format.SampleRate);
+            // Capture services may report more than one channel (e.g. the
+            // WasapiDeviceLoopbackCapture fallback reports the real device
+            // format); downmix to mono before the effect chain/spatializer,
+            // both of which operate on a single source channel.
+            var mono = DownmixToMono(interleavedSamples, _capture.Format.Channels);
+
+            _tracker.Update(deltaSeconds: mono.Length / (float)_capture.Format.SampleRate);
             _activeSpatializer.SetListenerOrientation(_tracker.YawDegrees, _tracker.PitchDegrees);
 
-            var processed = (float[])monoSamples.Clone();
-            _effectChain.Process(processed, processed.Length);
+            _effectChain.Process(mono, mono.Length);
 
-            var stereo = new float[processed.Length * 2];
-            _activeSpatializer.Process(processed, processed.Length, stereo);
+            var stereo = new float[mono.Length * 2];
+            _activeSpatializer.Process(mono, mono.Length, stereo);
 
             _output.Write(stereo, stereo.Length);
         }
@@ -2625,6 +2650,22 @@ public class RadioPipeline
         {
             BufferUnderrunCount++;
         }
+    }
+
+    private static float[] DownmixToMono(float[] interleaved, int channels)
+    {
+        if (channels <= 1) return (float[])interleaved.Clone();
+
+        int frameCount = interleaved.Length / channels;
+        var mono = new float[frameCount];
+        for (int i = 0; i < frameCount; i++)
+        {
+            float sum = 0f;
+            for (int c = 0; c < channels; c++)
+                sum += interleaved[i * channels + c];
+            mono[i] = sum / channels;
+        }
+        return mono;
     }
 
     private void OnCaptureStatusChanged(object? sender, AudioCaptureStatus status)
@@ -2674,8 +2715,7 @@ git commit -m "feat: add RadioPipeline orchestrating capture, effects, spatializ
 - Create: `src/SpotifyGameRadio.App/ViewModels/RelayCommand.cs`
 - Create: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
 - Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml.cs`
-- Modify: `src/SpotifyGameRadio.App/App.xaml.cs`
+- Verify only (no edit expected): `src/SpotifyGameRadio.App/MainWindow.xaml.cs`, `src/SpotifyGameRadio.App/App.xaml.cs` — composition happens via `MainWindow.xaml`'s inline `<Window.DataContext>` and the WPF template's default `StartupUri`; neither code-behind file needs changes for this task.
 
 **Interfaces:**
 - Consumes: `AudioSessionEnumerator` (Task 9), `RadioPipeline` (Task 12), `IConfigStore`/`RadioProfile` (Task 1), `Win32MouseHook` (Task 6), `WasapiProcessLoopbackCapture`/`WasapiDeviceLoopbackCapture` (Task 10), `WasapiAudioOutput` (Task 11), `StereoPanSpatializer`/`SteamAudioSpatializer` (Task 7/8).
@@ -3127,6 +3167,14 @@ underrunTimer.Start();
   Task 8 of the implementation plan for download instructions. Without
   it, the app still runs but falls back to simple stereo panning
   instead of true HRTF.
+- Set your default Windows output device's sample rate to 48000 Hz
+  (Sound Settings → your device → Device properties → Additional device
+  properties → Advanced). The DSP chain, HRTF spatializer, and output
+  renderer all assume 48kHz; only the `WasapiDeviceLoopbackCapture`
+  fallback (used on pre-20H1 Windows or if per-process capture fails)
+  reports the device's actual negotiated rate, so a mismatch there
+  won't crash anything but can make the radio filter's cutoffs sound
+  slightly off. Most modern default devices are already 48kHz.
 
 ## Running
 
