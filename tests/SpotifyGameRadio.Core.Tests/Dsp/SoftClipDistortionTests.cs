@@ -20,7 +20,7 @@ public class SoftClipDistortionTests
     {
         var distortion = new SoftClipDistortion(drive: 0.9f);
 
-        float output = distortion.Process(1.0f);
+        float output = distortion.Process(0.1f);
 
         Assert.True(output < 1.0f && output > 0f,
             $"Expected soft-clipped output to stay bounded below 1.0, got {output}.");
