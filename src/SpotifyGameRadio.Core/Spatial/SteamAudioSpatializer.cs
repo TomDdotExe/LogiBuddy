@@ -9,6 +9,11 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
     private IntPtr _effect;
     private readonly int _frameSize;
 
+    // Pre-allocated once (frame size is fixed for the lifetime of this instance) so
+    // Process() never allocates on the real-time audio thread.
+    private readonly float[] _outLeftBuffer;
+    private readonly float[] _outRightBuffer;
+
     private float _sourceX, _sourceY, _sourceZ;
     private float _yawRadians, _pitchRadians;
 
@@ -18,6 +23,8 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
         _hrtf = hrtf;
         _effect = effect;
         _frameSize = frameSize;
+        _outLeftBuffer = new float[frameSize];
+        _outRightBuffer = new float[frameSize];
     }
 
     /// Attempts to load the native library and create the HRTF pipeline.
@@ -90,8 +97,8 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
         var direction = new IPLVector3 { x = relativeX, y = relativeY, z = -relativeZ };
 
         fixed (float* inPtr = monoInput)
-        fixed (float* outLeft = new float[count])
-        fixed (float* outRight = new float[count])
+        fixed (float* outLeft = _outLeftBuffer)
+        fixed (float* outRight = _outRightBuffer)
         {
             var inChannels = stackalloc IntPtr[1] { (IntPtr)inPtr };
             var outChannels = stackalloc IntPtr[2] { (IntPtr)outLeft, (IntPtr)outRight };
