@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 
 namespace SpotifyGameRadio.Core.Audio;
@@ -13,34 +15,51 @@ public static class AudioSessionEnumerator
     public static IReadOnlyList<AudioSourceInfo> ListActiveSources()
     {
         var results = new List<AudioSourceInfo>();
-        using var enumerator = new MMDeviceEnumerator();
-        using var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
 
-        var sessions = defaultDevice.AudioSessionManager.Sessions;
-        for (int i = 0; i < sessions.Count; i++)
+        try
         {
-            using var session = sessions[i];
-            int pid = (int)session.GetProcessID;
-            if (pid == 0) continue;
+            using var enumerator = new MMDeviceEnumerator();
+            using var defaultDevice = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
 
-            string processName;
-            try
+            var sessions = defaultDevice.AudioSessionManager.Sessions;
+            for (int i = 0; i < sessions.Count; i++)
             {
-                using var process = Process.GetProcessById(pid);
-                processName = process.ProcessName;
+                using var session = sessions[i];
+                int pid = (int)session.GetProcessID;
+                if (pid == 0) continue;
+
+                string processName;
+                try
+                {
+                    using var process = Process.GetProcessById(pid);
+                    processName = process.ProcessName;
+                }
+                catch (ArgumentException)
+                {
+                    continue; // process exited between enumeration and lookup
+                }
+                catch (Win32Exception)
+                {
+                    continue; // no query rights to this process
+                }
+                catch (InvalidOperationException)
+                {
+                    continue; // process access denied
+                }
+
+                if (results.Any(r => r.ProcessId == pid)) continue;
+
+                string displayName = string.IsNullOrWhiteSpace(session.DisplayName)
+                    ? processName
+                    : session.DisplayName;
+
+                results.Add(new AudioSourceInfo(processName, pid, displayName));
             }
-            catch (ArgumentException)
-            {
-                continue; // process exited between enumeration and lookup
-            }
-
-            if (results.Any(r => r.ProcessId == pid)) continue;
-
-            string displayName = string.IsNullOrWhiteSpace(session.DisplayName)
-                ? processName
-                : session.DisplayName;
-
-            results.Add(new AudioSourceInfo(processName, pid, displayName));
+        }
+        catch (COMException)
+        {
+            // No default render device available (all outputs disabled/unplugged)
+            // Degrade gracefully by returning empty list
         }
 
         return results;
