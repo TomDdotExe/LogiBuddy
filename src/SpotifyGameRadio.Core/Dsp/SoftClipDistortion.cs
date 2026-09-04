@@ -14,8 +14,6 @@ public class SoftClipDistortion
     {
         if (Drive <= 0f) return input;
         float k = 1f + Drive * 19f; // maps [0,1] -> gentle..aggressive tanh slope
-        float result = MathF.Tanh(k * input) / MathF.Tanh(k);
-        // Clamp to ensure output stays strictly below ±1.0 for soft-clipping behavior
-        return MathF.CopySign(Math.Min(MathF.Abs(result), 1.0f - 1e-6f), result);
+        return MathF.Tanh(k * input) / MathF.Tanh(k);
     }
 }
