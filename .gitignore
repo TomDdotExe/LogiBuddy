@@ -1,0 +1,26 @@
+# Build artifacts
+bin/
+obj/
+
+# User-specific files
+*.user
+*.userprefs
+
+# Visual Studio cache/options
+.vs/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
