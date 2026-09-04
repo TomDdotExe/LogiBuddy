@@ -96,6 +96,14 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
 
         var direction = new IPLVector3 { x = relativeX, y = relativeY, z = -relativeZ };
 
+        // Defensive clamp: _outLeftBuffer/_outRightBuffer are fixed-size (allocated once at
+        // _frameSize). Real WASAPI capture callbacks aren't strictly guaranteed to always
+        // deliver exactly the configured block size (buffer catch-up after underrun, stream
+        // start/end can hand back a short or occasionally larger packet), so clamp rather than
+        // trust count blindly — this must never crash the real-time audio thread. Any samples
+        // beyond n are silently dropped, not processed.
+        int n = Math.Min(count, _frameSize);
+
         fixed (float* inPtr = monoInput)
         fixed (float* outLeft = _outLeftBuffer)
         fixed (float* outRight = _outRightBuffer)
@@ -103,8 +111,8 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
             var inChannels = stackalloc IntPtr[1] { (IntPtr)inPtr };
             var outChannels = stackalloc IntPtr[2] { (IntPtr)outLeft, (IntPtr)outRight };
 
-            var inBuffer = new IPLAudioBuffer { numChannels = 1, numSamples = count, data = (IntPtr)inChannels };
-            var outBuffer = new IPLAudioBuffer { numChannels = 2, numSamples = count, data = (IntPtr)outChannels };
+            var inBuffer = new IPLAudioBuffer { numChannels = 1, numSamples = n, data = (IntPtr)inChannels };
+            var outBuffer = new IPLAudioBuffer { numChannels = 2, numSamples = n, data = (IntPtr)outChannels };
 
             var effectParams = new IPLBinauralEffectParams
             {
@@ -116,7 +124,7 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
 
             iplBinauralEffectApply(_effect, ref effectParams, ref inBuffer, ref outBuffer);
 
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < n; i++)
             {
                 stereoOutputInterleaved[i * 2] = outLeft[i];
                 stereoOutputInterleaved[i * 2 + 1] = outRight[i];
