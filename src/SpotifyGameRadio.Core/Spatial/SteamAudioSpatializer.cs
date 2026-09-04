@@ -1,0 +1,126 @@
+using static SpotifyGameRadio.Core.Spatial.SteamAudioNative;
+
+namespace SpotifyGameRadio.Core.Spatial;
+
+public class SteamAudioSpatializer : ISpatializer, IDisposable
+{
+    private IntPtr _context;
+    private IntPtr _hrtf;
+    private IntPtr _effect;
+    private readonly int _frameSize;
+
+    private float _sourceX, _sourceY, _sourceZ;
+    private float _yawRadians, _pitchRadians;
+
+    private SteamAudioSpatializer(IntPtr context, IntPtr hrtf, IntPtr effect, int frameSize)
+    {
+        _context = context;
+        _hrtf = hrtf;
+        _effect = effect;
+        _frameSize = frameSize;
+    }
+
+    /// Attempts to load the native library and create the HRTF pipeline.
+    /// Returns false (never throws) if the native library is missing or
+    /// fails to initialize, so callers can fall back to StereoPanSpatializer.
+    public static bool TryCreate(int sampleRate, int frameSize, out SteamAudioSpatializer? spatializer)
+    {
+        spatializer = null;
+        try
+        {
+            var contextSettings = new IPLContextSettings { version = 4 << 16 | 5 << 8 };
+            if (iplContextCreate(ref contextSettings, out var context) != 0) return false;
+
+            var audioSettings = new IPLAudioSettings { samplingRate = sampleRate, frameSize = frameSize };
+            var hrtfSettings = new IPLHRTFSettings { type = 0, volume = 1f, normType = 0 };
+            if (iplHRTFCreate(context, ref audioSettings, ref hrtfSettings, out var hrtf) != 0)
+            {
+                iplContextRelease(ref context);
+                return false;
+            }
+
+            var effectSettings = new IPLBinauralEffectSettings { hrtf = hrtf };
+            if (iplBinauralEffectCreate(context, ref audioSettings, ref effectSettings, out var effect) != 0)
+            {
+                iplHRTFRelease(ref hrtf);
+                iplContextRelease(ref context);
+                return false;
+            }
+
+            spatializer = new SteamAudioSpatializer(context, hrtf, effect, frameSize);
+            return true;
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public void SetSourcePosition(float x, float y, float z)
+    {
+        _sourceX = x;
+        _sourceY = y;
+        _sourceZ = z;
+    }
+
+    public void SetListenerOrientation(float yawDegrees, float pitchDegrees)
+    {
+        _yawRadians = yawDegrees * MathF.PI / 180f;
+        _pitchRadians = pitchDegrees * MathF.PI / 180f;
+    }
+
+    public unsafe void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
+    {
+        // Rotate the fixed source into listener space (same convention as
+        // StereoPanSpatializer) before handing it to Steam Audio as a direction vector.
+        // NOTE: unlike the brief's pseudocode (which used cos(-yaw)/sin(-yaw) and was
+        // found to have a sign bug — see Task 7's StereoPanSpatializer fix), this uses
+        // the verified-correct, non-negated yaw so a listener turning right makes a
+        // world-fixed source swing toward their left ear.
+        float cosYaw = MathF.Cos(_yawRadians);
+        float sinYaw = MathF.Sin(_yawRadians);
+        float relativeX = _sourceX * cosYaw - _sourceZ * sinYaw;
+        float relativeZ = _sourceX * sinYaw + _sourceZ * cosYaw;
+        float relativeY = _sourceY; // pitch cross-coupling ignored for a car-mounted source
+
+        var direction = new IPLVector3 { x = relativeX, y = relativeY, z = -relativeZ };
+
+        fixed (float* inPtr = monoInput)
+        fixed (float* outLeft = new float[count])
+        fixed (float* outRight = new float[count])
+        {
+            var inChannels = stackalloc IntPtr[1] { (IntPtr)inPtr };
+            var outChannels = stackalloc IntPtr[2] { (IntPtr)outLeft, (IntPtr)outRight };
+
+            var inBuffer = new IPLAudioBuffer { numChannels = 1, numSamples = count, data = (IntPtr)inChannels };
+            var outBuffer = new IPLAudioBuffer { numChannels = 2, numSamples = count, data = (IntPtr)outChannels };
+
+            var effectParams = new IPLBinauralEffectParams
+            {
+                direction = direction,
+                interpolation = 0,
+                spatialBlend = 1f,
+                hrtf = _hrtf
+            };
+
+            iplBinauralEffectApply(_effect, ref effectParams, ref inBuffer, ref outBuffer);
+
+            for (int i = 0; i < count; i++)
+            {
+                stereoOutputInterleaved[i * 2] = outLeft[i];
+                stereoOutputInterleaved[i * 2 + 1] = outRight[i];
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_effect != IntPtr.Zero) iplBinauralEffectRelease(ref _effect);
+        if (_hrtf != IntPtr.Zero) iplHRTFRelease(ref _hrtf);
+        if (_context != IntPtr.Zero) iplContextRelease(ref _context);
+    }
+}
