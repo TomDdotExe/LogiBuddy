@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using NAudio.Wave;
@@ -11,6 +12,8 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
     private const int AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
     private const uint AUDCLNT_BUFFERFLAGS_SILENT = 0x2;
 
+    private readonly object _stateLock = new();
+
     private WasapiProcessLoopbackInterop.IAudioClient? _rawAudioClient;
     private WasapiProcessLoopbackInterop.IAudioCaptureClient? _rawCaptureClient;
     private AutoResetEvent? _eventHandle;
@@ -18,6 +21,7 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
     private volatile bool _running;
     private System.Timers.Timer? _retryTimer;
     private string? _processName;
+    private int _targetProcessId;
 
     public WaveFormat Format { get; private set; } = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
 
@@ -44,14 +48,16 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
         }
 
         IntPtr formatPtr = IntPtr.Zero;
+        AutoResetEvent? eventHandle = null;
+        bool committed = false;
         try
         {
-            _rawAudioClient = ActivateProcessLoopbackAudioClient((uint)process.Id);
+            var rawAudioClient = ActivateProcessLoopbackAudioClient((uint)process.Id);
 
             const int sampleRate = 48000, channels = 2, bitsPerSample = 32;
             formatPtr = AllocIeeeFloatWaveFormat(sampleRate, channels, bitsPerSample);
 
-            int hr = _rawAudioClient.Initialize(
+            int hr = rawAudioClient.Initialize(
                 AUDCLNT_SHAREMODE_SHARED,
                 AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                 2_000_000, // 200ms buffer, 100ns units
@@ -60,24 +66,37 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
                 IntPtr.Zero);
             if (hr != 0) throw new InvalidOperationException($"IAudioClient.Initialize failed, hresult=0x{hr:X}");
 
-            Format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
-
-            _eventHandle = new AutoResetEvent(false);
-            _rawAudioClient.SetEventHandle(_eventHandle.SafeWaitHandle.DangerousGetHandle());
+            eventHandle = new AutoResetEvent(false);
+            hr = rawAudioClient.SetEventHandle(eventHandle.SafeWaitHandle.DangerousGetHandle());
+            if (hr != 0) throw new InvalidOperationException($"IAudioClient.SetEventHandle failed, hresult=0x{hr:X}");
 
             var captureClientGuid = typeof(WasapiProcessLoopbackInterop.IAudioCaptureClient).GUID;
-            _rawAudioClient.GetService(ref captureClientGuid, out var serviceObj);
-            _rawCaptureClient = (WasapiProcessLoopbackInterop.IAudioCaptureClient)serviceObj;
+            hr = rawAudioClient.GetService(ref captureClientGuid, out var serviceObj);
+            if (hr != 0 || serviceObj is null)
+                throw new InvalidOperationException($"IAudioClient.GetService failed, hresult=0x{hr:X}");
+            var rawCaptureClient = (WasapiProcessLoopbackInterop.IAudioCaptureClient)serviceObj;
 
-            _rawAudioClient.Start();
-            _running = true;
-            _captureThread = new Thread(CaptureLoop) { IsBackground = true, Name = "SGR-ProcessLoopback" };
-            _captureThread.Start();
+            hr = rawAudioClient.Start();
+            if (hr != 0) throw new InvalidOperationException($"IAudioClient.Start failed, hresult=0x{hr:X}");
+
+            lock (_stateLock)
+            {
+                _rawAudioClient = rawAudioClient;
+                _rawCaptureClient = rawCaptureClient;
+                _eventHandle = eventHandle;
+                _targetProcessId = process.Id;
+                Format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
+                _running = true;
+                _captureThread = new Thread(CaptureLoop) { IsBackground = true, Name = "SGR-ProcessLoopback" };
+                _captureThread.Start();
+            }
+            committed = true;
 
             StatusChanged?.Invoke(this, AudioCaptureStatus.Capturing);
         }
         catch (Exception)
         {
+            if (!committed) eventHandle?.Dispose();
             StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
         }
         finally
@@ -146,26 +165,95 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
 
     private void CaptureLoop()
     {
-        while (_running)
+        // Captured once at thread start: assigned by TryStart inside _stateLock
+        // immediately before this thread is started, so these are guaranteed
+        // non-null and visible here via the Thread.Start() memory barrier.
+        var eventHandle = _eventHandle;
+        var captureClient = _rawCaptureClient;
+        if (eventHandle is null || captureClient is null)
         {
-            _eventHandle!.WaitOne(200);
-            if (!_running) break;
+            _running = false;
+            StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
+            return;
+        }
 
-            _rawCaptureClient!.GetNextPacketSize(out uint packetFrames);
-            while (packetFrames > 0)
+        try
+        {
+            while (_running)
             {
-                _rawCaptureClient.GetBuffer(out IntPtr dataPtr, out uint framesAvailable, out uint flags, out _, out _);
+                eventHandle.WaitOne(200);
+                if (!_running) break;
 
-                int sampleCount = (int)framesAvailable * 2; // stereo
-                var samples = new float[sampleCount];
-                if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
-                    Marshal.Copy(dataPtr, samples, 0, sampleCount);
+                if (!IsTargetProcessAlive())
+                {
+                    _running = false;
+                    ReleaseCaptureResources();
+                    StatusChanged?.Invoke(this, AudioCaptureStatus.NoSource);
+                    return;
+                }
 
-                DataAvailable?.Invoke(this, samples);
+                captureClient.GetNextPacketSize(out uint packetFrames);
+                while (packetFrames > 0)
+                {
+                    captureClient.GetBuffer(out IntPtr dataPtr, out uint framesAvailable, out uint flags, out _, out _);
 
-                _rawCaptureClient.ReleaseBuffer(framesAvailable);
-                _rawCaptureClient.GetNextPacketSize(out packetFrames);
+                    int sampleCount = (int)framesAvailable * 2; // stereo
+                    var samples = new float[sampleCount];
+                    if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
+                        Marshal.Copy(dataPtr, samples, 0, sampleCount);
+
+                    DataAvailable?.Invoke(this, samples);
+
+                    captureClient.ReleaseBuffer(framesAvailable);
+                    captureClient.GetNextPacketSize(out packetFrames);
+                }
             }
+        }
+        catch (Exception)
+        {
+            _running = false;
+            ReleaseCaptureResources();
+            StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
+        }
+    }
+
+    private bool IsTargetProcessAlive()
+    {
+        try
+        {
+            using var process = Process.GetProcessById(_targetProcessId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false; // no process with this id anymore
+        }
+        catch (Win32Exception)
+        {
+            return false; // no query rights (process likely gone/replaced)
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // process access denied
+        }
+    }
+
+    /// Best-effort teardown of the native COM/event-handle state, guarded by
+    /// _stateLock so it can't interleave with TryStart's field assignment.
+    /// Safe to call from Stop() or from the capture thread itself when it
+    /// detects the target process has exited or hits an unrecoverable error.
+    private void ReleaseCaptureResources()
+    {
+        lock (_stateLock)
+        {
+            try { _rawAudioClient?.Stop(); }
+            catch (Exception) { /* best-effort; client may already be in a bad state */ }
+
+            _rawCaptureClient = null;
+            _rawAudioClient = null;
+            _eventHandle?.Dispose();
+            _eventHandle = null;
+            _captureThread = null;
         }
     }
 
@@ -173,12 +261,12 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
     {
         _running = false;
         _retryTimer?.Stop();
-        _captureThread?.Join(500);
-        _rawAudioClient?.Stop();
-        _rawCaptureClient = null;
-        _rawAudioClient = null;
-        _eventHandle?.Dispose();
-        _eventHandle = null;
+
+        Thread? threadToJoin;
+        lock (_stateLock) { threadToJoin = _captureThread; }
+        threadToJoin?.Join(500);
+
+        ReleaseCaptureResources();
     }
 
     public void Dispose() => Stop();
