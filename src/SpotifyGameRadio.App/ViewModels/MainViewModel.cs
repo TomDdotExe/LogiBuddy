@@ -122,6 +122,20 @@ public class MainViewModel : INotifyPropertyChanged
                     StatusMessage = "Freelook hook failed to install — radio will play fixed at center.";
             });
             hookCheckTimer.Start();
+
+            // Reported after "Running" (not before) so this more specific
+            // notice is the one the user actually sees, rather than being
+            // clobbered by the generic "Running" assignment above within
+            // the same synchronous call — same pattern as hookCheckTimer.
+            if (primary == fallback)
+                StatusMessage = "HRTF unavailable — using simple stereo panning.";
+
+            var underrunTimer = new System.Timers.Timer(1000);
+            underrunTimer.Elapsed += (_, _) => Application.Current.Dispatcher.Invoke(() =>
+            {
+                if (_pipeline is not null) BufferUnderrunCount = _pipeline.BufferUnderrunCount;
+            });
+            underrunTimer.Start();
         }
         catch (Exception ex)
         {
