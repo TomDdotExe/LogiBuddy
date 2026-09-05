@@ -1,0 +1,144 @@
+using SpotifyGameRadio.Core.Audio;
+using SpotifyGameRadio.Core.Config;
+using SpotifyGameRadio.Core.Dsp;
+using SpotifyGameRadio.Core.Pipeline;
+using SpotifyGameRadio.Core.Spatial;
+using SpotifyGameRadio.Core.Tracking;
+using NAudio.Wave;
+using Xunit;
+
+namespace SpotifyGameRadio.Core.Tests.Pipeline;
+
+public class FakeCaptureService : IAudioCaptureService
+{
+    public WaveFormat Format { get; }
+    public event EventHandler<AudioCaptureStatus>? StatusChanged;
+    public event EventHandler<float[]>? DataAvailable;
+    public bool Started { get; private set; }
+
+    public FakeCaptureService(int channels = 1)
+    {
+        Format = WaveFormat.CreateIeeeFloatWaveFormat(48000, channels);
+    }
+
+    public void Start(string processName) { Started = true; StatusChanged?.Invoke(this, AudioCaptureStatus.Capturing); }
+    public void Stop() { Started = false; }
+    public void Dispose() { }
+
+    public void PushSamples(float[] samples) => DataAvailable?.Invoke(this, samples);
+    public void RaiseNoSource() => StatusChanged?.Invoke(this, AudioCaptureStatus.NoSource);
+}
+
+public class FakeOutputService : IAudioOutputService
+{
+    public event EventHandler? DeviceLost;
+    public List<float[]> WrittenBuffers { get; } = new();
+
+    public void Start(string deviceId) { }
+    public void Write(float[] stereoInterleaved, int count) => WrittenBuffers.Add(stereoInterleaved[..(count)]);
+    public void Stop() { }
+    public void Dispose() { }
+    public void RaiseDeviceLost() => DeviceLost?.Invoke(this, EventArgs.Empty);
+}
+
+public class FakeSpatializer : ISpatializer
+{
+    public void SetSourcePosition(float x, float y, float z) { }
+    public void SetListenerOrientation(float yawDegrees, float pitchDegrees) { }
+    public void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            stereoOutputInterleaved[i * 2] = monoInput[i];
+            stereoOutputInterleaved[i * 2 + 1] = monoInput[i];
+        }
+    }
+}
+
+public class RadioPipelineTests
+{
+    private static RadioPipeline BuildPipeline(FakeCaptureService capture, FakeOutputService output, out FreelookTracker tracker)
+    {
+        var profile = new RadioProfile { WetDryMix = 0f }; // dry passthrough for deterministic assertions
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        effectChain.ApplyProfile(profile);
+        var spatializer = new FakeSpatializer();
+
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker);
+        pipeline.ApplyProfile(profile);
+        return pipeline;
+    }
+
+    [Fact]
+    public void CapturedAudio_FlowsThroughToOutput()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+
+        pipeline.Start();
+        capture.PushSamples(new float[] { 0.5f, -0.5f, 0.25f });
+
+        Assert.Single(output.WrittenBuffers);
+        Assert.Equal(new float[] { 0.5f, 0.5f, -0.5f, -0.5f, 0.25f, 0.25f }, output.WrittenBuffers[0]);
+    }
+
+    [Fact]
+    public void NoSourceStatus_RaisesWarning()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+        string? warning = null;
+        pipeline.Warning += (_, msg) => warning = msg;
+
+        pipeline.Start();
+        capture.RaiseNoSource();
+
+        Assert.NotNull(warning);
+    }
+
+    [Fact]
+    public void OutputDeviceLost_RaisesWarning()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+        string? warning = null;
+        pipeline.Warning += (_, msg) => warning = msg;
+
+        pipeline.Start();
+        output.RaiseDeviceLost();
+
+        Assert.NotNull(warning);
+    }
+
+    [Fact]
+    public void Start_StartsCaptureService()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+
+        pipeline.Start();
+
+        Assert.True(capture.Started);
+    }
+
+    [Fact]
+    public void TwoChannelCapture_IsDownmixedToMonoBeforeProcessing()
+    {
+        var capture = new FakeCaptureService(channels: 2);
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+
+        pipeline.Start();
+        // Two stereo frames: (L=1.0, R=0.0) and (L=0.4, R=0.2) -> mono 0.5, 0.3
+        capture.PushSamples(new float[] { 1.0f, 0.0f, 0.4f, 0.2f });
+
+        Assert.Single(output.WrittenBuffers);
+        Assert.Equal(new float[] { 0.5f, 0.5f, 0.3f, 0.3f }, output.WrittenBuffers[0]);
+    }
+}
