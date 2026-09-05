@@ -12,15 +12,15 @@ internal static class WasapiProcessLoopbackInterop
     public const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;
     public const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
     public const ushort VT_BLOB = 0x41;
-    public const string VirtualAudioDeviceProcessLoopback = "VAD://Process_Loopback";
+    public const string VirtualAudioDeviceProcessLoopback = "VAD\\Process_Loopback";
     public static readonly Guid IID_IAudioClient = new("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
 
     [StructLayout(LayoutKind.Sequential)]
     public struct AUDIOCLIENT_ACTIVATION_PARAMS
     {
         public int ActivationType;
-        public int ProcessLoopbackMode;
         public uint TargetProcessId;
+        public int ProcessLoopbackMode;
     }
 
     /// Minimal PROPVARIANT laid out for the VT_BLOB case only (what

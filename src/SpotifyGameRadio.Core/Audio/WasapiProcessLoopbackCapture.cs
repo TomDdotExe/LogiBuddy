@@ -94,9 +94,10 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
 
             StatusChanged?.Invoke(this, AudioCaptureStatus.Capturing);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             if (!committed) eventHandle?.Dispose();
+            DebugLog($"TryStart failed: {ex}");
             StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
         }
         finally
@@ -209,12 +210,24 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             _running = false;
             ReleaseCaptureResources();
+            DebugLog($"CaptureLoop failed: {ex}");
             StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
         }
+    }
+
+    private static void DebugLog(string message)
+    {
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sgr-capture-debug.log"),
+                $"{DateTime.Now:HH:mm:ss.fff} {message}\n\n");
+        }
+        catch { /* diagnostic-only, never let logging itself throw */ }
     }
 
     private bool IsTargetProcessAlive()
