@@ -16,6 +16,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly IConfigStore _configStore = new ConfigStore();
     private RadioPipeline? _pipeline;
     private Win32MouseHook? _mouseHook;
+    private System.Timers.Timer? _underrunTimer;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -130,12 +131,18 @@ public class MainViewModel : INotifyPropertyChanged
             if (primary == fallback)
                 StatusMessage = "HRTF unavailable — using simple stereo panning.";
 
-            var underrunTimer = new System.Timers.Timer(1000);
-            underrunTimer.Elapsed += (_, _) => Application.Current.Dispatcher.Invoke(() =>
+            // Stop/dispose any previous instance first so a Start->Stop->Start
+            // cycle can't leak a perpetually-firing timer (AutoReset defaults
+            // to true here, unlike the self-limiting hookCheckTimer above) —
+            // same idempotent-restart pattern as WasapiAudioOutput.Start().
+            _underrunTimer?.Stop();
+            _underrunTimer?.Dispose();
+            _underrunTimer = new System.Timers.Timer(1000);
+            _underrunTimer.Elapsed += (_, _) => Application.Current.Dispatcher.Invoke(() =>
             {
                 if (_pipeline is not null) BufferUnderrunCount = _pipeline.BufferUnderrunCount;
             });
-            underrunTimer.Start();
+            _underrunTimer.Start();
         }
         catch (Exception ex)
         {
@@ -151,6 +158,9 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _pipeline?.Stop();
         _mouseHook?.Dispose();
+        _underrunTimer?.Stop();
+        _underrunTimer?.Dispose();
+        _underrunTimer = null;
         StatusMessage = "Stopped";
     }
 
