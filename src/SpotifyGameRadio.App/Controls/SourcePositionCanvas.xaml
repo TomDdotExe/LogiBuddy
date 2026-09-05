@@ -3,7 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="200" Height="200">
     <Border BorderBrush="Gray" BorderThickness="1" Background="#111">
-        <Canvas x:Name="PlacementCanvas" MouseLeftButtonDown="OnCanvasMouseDown" MouseMove="OnCanvasMouseMove">
+        <!-- Background="Transparent" is required: a Canvas with a null Background is
+             not hit-testable over its empty area, and both children below are
+             IsHitTestVisible="False", so without this neither mouse handler could
+             ever fire. The Border's #111 background still shows through. -->
+        <Canvas x:Name="PlacementCanvas" Background="Transparent"
+                MouseLeftButtonDown="OnCanvasMouseDown" MouseMove="OnCanvasMouseMove">
             <!-- Listener marker fixed at center, facing up (forward = -Y on screen). -->
             <Ellipse Width="10" Height="10" Fill="White" Canvas.Left="95" Canvas.Top="95" IsHitTestVisible="False" />
             <Ellipse x:Name="SourceMarker" Width="14" Height="14" Fill="Orange"

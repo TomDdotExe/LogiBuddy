@@ -8,6 +8,7 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
     private IntPtr _hrtf;
     private IntPtr _effect;
     private readonly int _frameSize;
+    private bool _disposed;
 
     // Pre-allocated once (frame size is fixed for the lifetime of this instance) so
     // Process() never allocates on the real-time audio thread.
@@ -63,6 +64,12 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
         }
         catch (EntryPointNotFoundException)
         {
+            return false;
+        }
+        catch (BadImageFormatException)
+        {
+            // A phonon.dll of the wrong architecture (e.g. a 32-bit build dropped
+            // next to a 64-bit app) — still a "not available", never a throw.
             return false;
         }
     }
@@ -134,6 +141,11 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
 
     public void Dispose()
     {
+        // Releasing the same native handle twice would corrupt Steam Audio's
+        // refcounts, so make a second Dispose() a no-op.
+        if (_disposed) return;
+        _disposed = true;
+
         if (_effect != IntPtr.Zero) iplBinauralEffectRelease(ref _effect);
         if (_hrtf != IntPtr.Zero) iplHRTFRelease(ref _hrtf);
         if (_context != IntPtr.Zero) iplContextRelease(ref _context);

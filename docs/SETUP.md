@@ -5,8 +5,15 @@
   Older Windows falls back to whole-device capture automatically.
 - .NET 8 SDK.
 - `phonon.dll` (Steam Audio native library) placed at
-  `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll` — see
-  Task 8 of the implementation plan for download instructions. Without
+  `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`. Steam
+  Audio is Valve's open-source spatial audio SDK (MIT licensed); grab a
+  Windows release from
+  <https://github.com/ValveSoftware/steam-audio/releases> — use version
+  4.5.x or later, since this project's native struct layouts were
+  written against the phonon 4.x API. Unzip it, find `phonon.dll` under
+  `bin/windows-x64/` (older archives may name that folder slightly
+  differently — take the 64-bit Windows one), and copy that single file
+  to the path above, creating the folders if they don't exist. Without
   it, the app still runs but falls back to simple stereo panning
   instead of true HRTF.
 - Set your default Windows output device's sample rate to 48000 Hz
@@ -14,9 +21,12 @@
   properties → Advanced). The DSP chain, HRTF spatializer, and output
   renderer all assume 48kHz; only the `WasapiDeviceLoopbackCapture`
   fallback (used on pre-20H1 Windows or if per-process capture fails)
-  reports the device's actual negotiated rate, so a mismatch there
-  won't crash anything but can make the radio filter's cutoffs sound
-  slightly off. Most modern default devices are already 48kHz.
+  reports the device's actual negotiated rate. A mismatch there won't
+  crash anything, but it does cause persistent stuttering and audio
+  glitches: the output renderer is hardcoded to 48kHz, so if capture
+  negotiates a different rate (e.g. 44.1kHz) the playback buffer is
+  filled slower than it is drained and repeatedly runs dry. Most modern
+  default devices are already 48kHz.
 
 ## Running
 
@@ -33,6 +43,25 @@
    Mouse Sensitivity / Max Yaw / Max Pitch to roughly match your
    in-game sensitivity and freelook angle limits — this is an
    approximation, not a memory read, so expect to tune it by ear.
+   These four settings have no UI controls yet; see Known Limitations
+   below for how to edit them.
 5. Click Start, then hold your freelook key and look around in-game —
    the radio audio should shift as if it were mounted in the vehicle.
 6. Click Save Profile to keep these settings for next time.
+
+## Known Limitations
+
+- Most tunable settings have no UI controls yet: output device
+  selection, the freelook hotkey, mouse sensitivity, max yaw/pitch, and
+  the profile name (so, profile switching too). To change them, click
+  Save Profile once to create the file, then edit
+  `%APPDATA%\SpotifyGameRadio\Profiles\<name>.json` directly and
+  restart the app.
+- Moving a DSP slider while the radio is running has no live effect.
+  Click Stop, then Start again, to apply the change.
+- Vertical look (pitch) has no audible effect on the spatialized audio
+  — only left/right (yaw) does.
+- On pre-Windows-10-20H1 systems, which use the whole-device capture
+  fallback, choosing an audio source on the same device you're playing
+  back to can create a feedback loop. Use headphones and/or route the
+  source to a different device if you hit this.

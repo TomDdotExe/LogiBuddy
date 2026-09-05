@@ -17,7 +17,13 @@
          is actually placed here (Task 8 Step 1, intentionally not done by this
          dispatch — see task-8-report.md). Once present, this behaves exactly as
          the brief specifies: PreserveNewest copy to the output directory. -->
+    <!-- <Link> flattens the copy to the output directory root (next to the .exe).
+         Without it the file lands in bin\...\runtimes\win-x64\native\, which .NET's
+         native library probing does NOT search for a plain [DllImport("phonon")] —
+         only a real NuGet native package produces a deps.json runtimeTargets entry
+         for that layout, a <None> item does not. -->
     <None Include="runtimes\win-x64\native\phonon.dll" Condition="Exists('runtimes\win-x64\native\phonon.dll')">
+      <Link>phonon.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

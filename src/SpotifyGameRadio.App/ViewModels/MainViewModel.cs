@@ -48,7 +48,12 @@ public class MainViewModel : INotifyPropertyChanged
     public MainViewModel()
     {
         RefreshSourcesCommand = new RelayCommand(_ => RefreshSources());
-        StartCommand = new RelayCommand(_ => Start());
+        // Guarded so a second click can't build a whole new capture/output/hook
+        // stack over _pipeline/_mouseHook, orphaning the first (unstoppable, and
+        // both rendering to the output device at once). RelayCommand raises
+        // CanExecuteChanged off CommandManager.RequerySuggested, which WPF fires
+        // after UI interactions such as the Start/Stop clicks themselves.
+        StartCommand = new RelayCommand(_ => Start(), _ => _pipeline is null);
         StopCommand = new RelayCommand(_ => Stop());
         SaveProfileCommand = new RelayCommand(_ => _configStore.Save(Profile));
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
@@ -100,9 +105,18 @@ public class MainViewModel : INotifyPropertyChanged
             if (SteamAudioSpatializer.TryCreate(48000, 1024, out var steamAudio) && steamAudio is not null)
                 primary = steamAudio;
 
-            pipeline = new RadioPipeline(activeCapture, output, primary, fallback, effectChain, tracker);
+            // frameSize must match the frame size the spatializer was created
+            // with above (1024) — the pipeline hands it exactly this many
+            // samples per block.
+            pipeline = new RadioPipeline(activeCapture, output, primary, fallback, effectChain, tracker, frameSize: 1024);
             pipeline.ApplyProfile(Profile);
             pipeline.Warning += (_, message) => Application.Current.Dispatcher.Invoke(() => StatusMessage = message);
+
+            // Set before Start(): pipeline.Start() can synchronously raise a
+            // Warning (e.g. NoSource), which lands in StatusMessage inline
+            // because Dispatcher.Invoke runs immediately when already on the
+            // UI thread. Assigning "Running" afterwards would erase it.
+            StatusMessage = "Running";
 
             pipeline.Start();
 
@@ -112,7 +126,6 @@ public class MainViewModel : INotifyPropertyChanged
             // or a subsequent retry).
             _pipeline = pipeline;
             _mouseHook = mouseHook;
-            StatusMessage = "Running";
 
             // The hook installs on a background thread; give it a moment, then
             // warn if it failed (spec requires freelook-disabled to be visible).
@@ -147,6 +160,7 @@ public class MainViewModel : INotifyPropertyChanged
         catch (Exception ex)
         {
             pipeline?.Stop();
+            pipeline?.Dispose();
             mouseHook?.Dispose();
             _pipeline = null;
             _mouseHook = null;
@@ -157,10 +171,18 @@ public class MainViewModel : INotifyPropertyChanged
     private void Stop()
     {
         _pipeline?.Stop();
+        // Dispose after Stop: releases the spatializers' native resources
+        // (Steam Audio HRTF context/effect), which would otherwise leak on
+        // every Start->Stop->Start cycle.
+        _pipeline?.Dispose();
         _mouseHook?.Dispose();
         _underrunTimer?.Stop();
         _underrunTimer?.Dispose();
         _underrunTimer = null;
+        // Cleared so StartCommand.CanExecute goes true again and a fresh
+        // Start() builds a new stack rather than stacking on a live one.
+        _pipeline = null;
+        _mouseHook = null;
         StatusMessage = "Stopped";
     }
 

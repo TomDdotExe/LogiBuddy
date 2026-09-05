@@ -57,7 +57,10 @@ public class FakeSpatializer : ISpatializer
 
 public class RadioPipelineTests
 {
-    private static RadioPipeline BuildPipeline(FakeCaptureService capture, FakeOutputService output, out FreelookTracker tracker)
+    // frameSize is explicit per test: the pipeline processes in fixed-size blocks,
+    // so a test that expects one output buffer per push must use a frameSize equal
+    // to the mono sample count of that push.
+    private static RadioPipeline BuildPipeline(FakeCaptureService capture, FakeOutputService output, out FreelookTracker tracker, int frameSize = 3)
     {
         var profile = new RadioProfile { WetDryMix = 0f }; // dry passthrough for deterministic assertions
         var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
@@ -66,7 +69,7 @@ public class RadioPipelineTests
         effectChain.ApplyProfile(profile);
         var spatializer = new FakeSpatializer();
 
-        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker);
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize);
         pipeline.ApplyProfile(profile);
         return pipeline;
     }
@@ -76,7 +79,7 @@ public class RadioPipelineTests
     {
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
-        var pipeline = BuildPipeline(capture, output, out _);
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
 
         pipeline.Start();
         capture.PushSamples(new float[] { 0.5f, -0.5f, 0.25f });
@@ -132,7 +135,8 @@ public class RadioPipelineTests
     {
         var capture = new FakeCaptureService(channels: 2);
         var output = new FakeOutputService();
-        var pipeline = BuildPipeline(capture, output, out _);
+        // 4 interleaved stereo samples downmix to 2 mono samples -> frameSize 2.
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 2);
 
         pipeline.Start();
         // Two stereo frames: (L=1.0, R=0.0) and (L=0.4, R=0.2) -> mono 0.5, 0.3
@@ -140,5 +144,28 @@ public class RadioPipelineTests
 
         Assert.Single(output.WrittenBuffers);
         Assert.Equal(new float[] { 0.5f, 0.5f, 0.3f, 0.3f }, output.WrittenBuffers[0]);
+    }
+
+    [Fact]
+    public void ShortCaptureBuffers_AreAccumulatedIntoFixedSizeBlocks()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 4);
+
+        pipeline.Start();
+
+        // Two samples is less than one block — nothing may be emitted yet, and
+        // nothing may be dropped either.
+        capture.PushSamples(new float[] { 0.1f, 0.2f });
+        Assert.Empty(output.WrittenBuffers);
+
+        // Two more completes exactly one block, spanning both callbacks in order.
+        capture.PushSamples(new float[] { 0.3f, 0.4f });
+
+        Assert.Single(output.WrittenBuffers);
+        Assert.Equal(
+            new float[] { 0.1f, 0.1f, 0.2f, 0.2f, 0.3f, 0.3f, 0.4f, 0.4f },
+            output.WrittenBuffers[0]);
     }
 }
