@@ -12,6 +12,8 @@ public class WasapiAudioOutput : IAudioOutputService
 
     public void Start(string deviceId)
     {
+        Stop();
+
         using var enumerator = new MMDeviceEnumerator();
         MMDevice device;
         try
