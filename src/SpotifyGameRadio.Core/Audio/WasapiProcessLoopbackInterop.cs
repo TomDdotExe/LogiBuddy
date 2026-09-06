@@ -34,7 +34,7 @@ internal static class WasapiProcessLoopbackInterop
         [FieldOffset(16)] public IntPtr blobPBlobData;
     }
 
-    [ComImport, Guid("94EA2B94-E9CC-49E0-C0FF-EE64CA8F5B90"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [ComImport, Guid("41D949AB-9862-444A-80F6-C261334DA5EB"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IActivateAudioInterfaceCompletionHandler
     {
         void ActivateCompleted(IActivateAudioInterfaceAsyncOperation activateOperation);

@@ -11,15 +11,16 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
     private const int AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
     private const int AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
     private const uint AUDCLNT_BUFFERFLAGS_SILENT = 0x2;
+    private const int RetryIntervalMs = 2000;
 
     private readonly object _stateLock = new();
 
     private WasapiProcessLoopbackInterop.IAudioClient? _rawAudioClient;
     private WasapiProcessLoopbackInterop.IAudioCaptureClient? _rawCaptureClient;
     private AutoResetEvent? _eventHandle;
-    private Thread? _captureThread;
+    private Thread? _worker;
     private volatile bool _running;
-    private System.Timers.Timer? _retryTimer;
+    private volatile bool _stopRequested;
     private string? _processName;
     private int _targetProcessId;
 
@@ -30,21 +31,55 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
 
     public void Start(string processName)
     {
-        _processName = processName;
-        TryStart();
+        // Re-entrant Start: tear the previous worker down first so we can't
+        // orphan a live capture thread / COM client.
+        if (_worker is not null) Stop();
 
-        _retryTimer = new System.Timers.Timer(2000);
-        _retryTimer.Elapsed += (_, _) => { if (!_running) TryStart(); };
-        _retryTimer.Start();
+        _processName = processName;
+        _stopRequested = false;
+
+        // ActivateAudioInterfaceAsync delivers its completion callback on a COM
+        // MTA worker thread, and the process-loopback IAudioClient it returns has
+        // no proxy/stub, so it can only be QueryInterface'd / used from the MTA
+        // apartment it was created in. The WPF Start button calls in on the STA
+        // UI thread, so the whole activation + capture lifetime has to live on one
+        // dedicated MTA thread — casting the activated interface from the STA
+        // thread is what fails with E_NOINTERFACE.
+        _worker = new Thread(WorkerLoop) { IsBackground = true, Name = "SGR-ProcessLoopback" };
+        _worker.SetApartmentState(ApartmentState.MTA);
+        _worker.Start();
     }
 
-    private void TryStart()
+    private void WorkerLoop()
+    {
+        try
+        {
+            while (!_stopRequested)
+            {
+                if (TryActivateAndStart())
+                    CaptureLoop(); // blocks until Stop() or an unrecoverable error
+
+                if (_stopRequested) break;
+
+                // Back off before retrying (source not started yet, or a transient
+                // activation failure), polling _stopRequested so Stop() stays snappy.
+                for (int waited = 0; waited < RetryIntervalMs && !_stopRequested; waited += 50)
+                    Thread.Sleep(50);
+            }
+        }
+        finally
+        {
+            ReleaseCaptureResources();
+        }
+    }
+
+    private bool TryActivateAndStart()
     {
         var process = Process.GetProcessesByName(_processName).FirstOrDefault();
         if (process is null)
         {
             StatusChanged?.Invoke(this, AudioCaptureStatus.NoSource);
-            return;
+            return false;
         }
 
         IntPtr formatPtr = IntPtr.Zero;
@@ -87,18 +122,19 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
                 _targetProcessId = process.Id;
                 Format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
                 _running = true;
-                _captureThread = new Thread(CaptureLoop) { IsBackground = true, Name = "SGR-ProcessLoopback" };
-                _captureThread.Start();
             }
             committed = true;
 
+            DebugLog($"capture started for '{_processName}' (pid={process.Id}, apartment={Thread.CurrentThread.GetApartmentState()})");
             StatusChanged?.Invoke(this, AudioCaptureStatus.Capturing);
+            return true;
         }
         catch (Exception ex)
         {
             if (!committed) eventHandle?.Dispose();
-            DebugLog($"TryStart failed: {ex}");
+            DebugLog($"TryActivateAndStart failed (apartment={Thread.CurrentThread.GetApartmentState()}): {ex}");
             StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
+            return false;
         }
         finally
         {
@@ -164,13 +200,19 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
         return ptr;
     }
 
+    /// Runs on the dedicated MTA worker thread, straight after a successful
+    /// TryActivateAndStart, so the COM capture client is only ever touched from
+    /// the apartment it was activated in. Returns on Stop() or an unrecoverable
+    /// error; WorkerLoop decides whether to retry.
     private void CaptureLoop()
     {
-        // Captured once at thread start: assigned by TryStart inside _stateLock
-        // immediately before this thread is started, so these are guaranteed
-        // non-null and visible here via the Thread.Start() memory barrier.
-        var eventHandle = _eventHandle;
-        var captureClient = _rawCaptureClient;
+        AutoResetEvent? eventHandle;
+        WasapiProcessLoopbackInterop.IAudioCaptureClient? captureClient;
+        lock (_stateLock)
+        {
+            eventHandle = _eventHandle;
+            captureClient = _rawCaptureClient;
+        }
         if (eventHandle is null || captureClient is null)
         {
             _running = false;
@@ -180,10 +222,10 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
 
         try
         {
-            while (_running)
+            while (_running && !_stopRequested)
             {
                 eventHandle.WaitOne(200);
-                if (!_running) break;
+                if (!_running || _stopRequested) break;
 
                 if (!IsTargetProcessAlive())
                 {
@@ -214,7 +256,7 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
         {
             _running = false;
             ReleaseCaptureResources();
-            DebugLog($"CaptureLoop failed: {ex}");
+            DebugLog($"CaptureLoop failed (apartment={Thread.CurrentThread.GetApartmentState()}): {ex}");
             StatusChanged?.Invoke(this, AudioCaptureStatus.Error);
         }
     }
@@ -252,9 +294,10 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
     }
 
     /// Best-effort teardown of the native COM/event-handle state, guarded by
-    /// _stateLock so it can't interleave with TryStart's field assignment.
-    /// Safe to call from Stop() or from the capture thread itself when it
-    /// detects the target process has exited or hits an unrecoverable error.
+    /// _stateLock so it can't interleave with TryActivateAndStart's field
+    /// assignment. Safe to call from Stop(), from the worker thread itself when
+    /// it detects the target process has exited or hits an unrecoverable error,
+    /// and from WorkerLoop's finally on exit.
     private void ReleaseCaptureResources()
     {
         lock (_stateLock)
@@ -266,18 +309,26 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
             _rawAudioClient = null;
             _eventHandle?.Dispose();
             _eventHandle = null;
-            _captureThread = null;
         }
     }
 
     public void Stop()
     {
+        _stopRequested = true;
         _running = false;
-        _retryTimer?.Stop();
 
-        Thread? threadToJoin;
-        lock (_stateLock) { threadToJoin = _captureThread; }
-        threadToJoin?.Join(500);
+        Thread? worker;
+        lock (_stateLock)
+        {
+            worker = _worker;
+            // Wake CaptureLoop's WaitOne right away. Held under _stateLock so this
+            // can't race ReleaseCaptureResources disposing the same handle.
+            try { _eventHandle?.Set(); }
+            catch (ObjectDisposedException) { /* already torn down */ }
+        }
+
+        worker?.Join(2000);
+        _worker = null;
 
         ReleaseCaptureResources();
     }
