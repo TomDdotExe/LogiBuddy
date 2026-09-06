@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
+using SpotifyGameRadio.App.Audio;
 using SpotifyGameRadio.Core.Audio;
 using SpotifyGameRadio.Core.Config;
 using SpotifyGameRadio.Core.Dsp;
@@ -17,6 +18,7 @@ public class MainViewModel : INotifyPropertyChanged
     private RadioPipeline? _pipeline;
     private Win32MouseHook? _mouseHook;
     private System.Timers.Timer? _underrunTimer;
+    private TestTonePlayer? _testTone;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -35,6 +37,31 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _bufferUnderrunCount;
         set { _bufferUnderrunCount = value; OnPropertyChanged(); }
+    }
+
+    private bool _testToneEnabled;
+    /// Plays a soft 440 Hz sine from this process so per-process loopback has a
+    /// source to capture without needing Spotify running. Independent of
+    /// Start/Stop; select "SpotifyGameRadio.App" in the Source list to route it
+    /// through the radio pipeline.
+    public bool TestToneEnabled
+    {
+        get => _testToneEnabled;
+        set
+        {
+            if (_testToneEnabled == value) return;
+            _testToneEnabled = value;
+            if (value)
+            {
+                _testTone ??= new TestTonePlayer();
+                _testTone.Start();
+            }
+            else
+            {
+                _testTone?.Stop();
+            }
+            OnPropertyChanged();
+        }
     }
 
     public RadioProfile Profile { get; private set; } = new();
@@ -184,6 +211,13 @@ public class MainViewModel : INotifyPropertyChanged
         _pipeline = null;
         _mouseHook = null;
         StatusMessage = "Stopped";
+    }
+
+    /// Called from MainWindow.OnClosed so the test tone never outlives the window.
+    public void Cleanup()
+    {
+        _testTone?.Dispose();
+        _testTone = null;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

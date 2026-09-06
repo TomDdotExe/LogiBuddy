@@ -27,6 +27,9 @@
             <ComboBox Width="200" ItemsSource="{Binding AvailableSources}" DisplayMemberPath="DisplayName"
                       SelectedValuePath="ProcessName" SelectedValue="{Binding Profile.SourceProcessName}" />
             <Button Content="Refresh" Command="{Binding RefreshSourcesCommand}" Margin="8,0,0,0" />
+            <CheckBox Content="Test tone (440 Hz)" IsChecked="{Binding TestToneEnabled}"
+                      VerticalAlignment="Center" Margin="16,0,0,0"
+                      ToolTip="Plays a soft sine from this app so per-process loopback has something to capture. Pick &quot;SpotifyGameRadio.App&quot; as the source to hear it through the radio pipeline." />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">

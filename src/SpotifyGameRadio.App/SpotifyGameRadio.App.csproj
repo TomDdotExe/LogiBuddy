@@ -4,6 +4,11 @@
     <ProjectReference Include="..\SpotifyGameRadio.Core\SpotifyGameRadio.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Used directly by Audio/TestTonePlayer.cs (also flows transitively via Core). -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
