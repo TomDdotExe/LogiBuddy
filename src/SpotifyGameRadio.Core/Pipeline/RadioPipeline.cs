@@ -69,6 +69,12 @@ public class RadioPipeline : IDisposable
         _output.DeviceLost += OnOutputDeviceLost;
     }
 
+    /// Re-applies every live-tunable value (DSP parameters, freelook tuning,
+    /// source position) to the running components. Safe to call on a running
+    /// pipeline from the UI thread: each target is a plain scalar the audio
+    /// thread reads once per block and individual float writes are atomic, so
+    /// the worst case is one block blended across an old and new value. It
+    /// deliberately touches nothing in capture, output, or the input hook.
     public void ApplyProfile(RadioProfile profile)
     {
         _profile = profile;

@@ -55,6 +55,21 @@ public class FakeSpatializer : ISpatializer
     }
 }
 
+public class RecordingSpatializer : ISpatializer
+{
+    public (float x, float y, float z) LastPosition { get; private set; }
+    public void SetSourcePosition(float x, float y, float z) => LastPosition = (x, y, z);
+    public void SetListenerOrientation(float yawDegrees, float pitchDegrees) { }
+    public void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            stereoOutputInterleaved[i * 2] = monoInput[i];
+            stereoOutputInterleaved[i * 2 + 1] = monoInput[i];
+        }
+    }
+}
+
 public class RadioPipelineTests
 {
     // frameSize is explicit per test: the pipeline processes in fixed-size blocks,
@@ -167,5 +182,27 @@ public class RadioPipelineTests
         Assert.Equal(
             new float[] { 0.1f, 0.1f, 0.2f, 0.2f, 0.3f, 0.3f, 0.4f, 0.4f },
             output.WrittenBuffers[0]);
+    }
+
+    [Fact]
+    public void ApplyProfile_AfterStart_PushesUpdatedSourcePositionToSpatializer()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { WetDryMix = 0f };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new RecordingSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+
+        pipeline.Start();
+
+        profile.SourceX = 0.9f;
+        profile.SourceZ = -0.4f;
+        pipeline.ApplyProfile(profile);
+
+        Assert.Equal((0.9f, -0.1f, -0.4f), spatializer.LastPosition);
     }
 }
