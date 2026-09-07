@@ -41,7 +41,11 @@
                       ToolTip="Plays a soft sine from this app so per-process loopback has something to capture. Pick &quot;SpotifyGameRadio.App&quot; as the source to hear it through the radio pipeline." />
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+        <!-- Whole row greys out where per-app routing isn't available (Windows 10,
+             or no reachable IAudioPolicyConfig). WPF ANDs parent and child
+             IsEnabled, so the combo's own binding still applies. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8"
+                    IsEnabled="{Binding IsRoutingSupported}">
             <CheckBox x:Name="AutoRouteCheck" Content="Auto-route source to a silent device"
                       IsChecked="{Binding Profile.AutoRouteSource}" VerticalAlignment="Center" />
             <ComboBox Width="230" Margin="8,0,0,0"

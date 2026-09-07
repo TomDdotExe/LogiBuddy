@@ -41,6 +41,16 @@ public partial class HotkeyCaptureControl : UserControl
         UpdateLabel();
     }
 
+    /// Clicking away from an armed control cancels capture, so it can't sit
+    /// stuck on "Press a key or mouse button…" and then swallow the user's next
+    /// click on it as "Mouse Left".
+    private void OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_capturing) return;
+        _capturing = false;
+        UpdateLabel();
+    }
+
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (!_capturing) return;

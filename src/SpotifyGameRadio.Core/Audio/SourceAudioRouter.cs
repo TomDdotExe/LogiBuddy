@@ -7,7 +7,22 @@ public sealed record AppAudioRoute(string Console, string Multimedia, string Com
 
 public sealed class SourceRoutingException : Exception
 {
-    public SourceRoutingException(string message, int hresult) : base(message) => HResult = hresult;
+    // E_INVALIDARG. The undocumented IAudioPolicyConfig API returns this when the
+    // target process has no audio session (PROCESS_NO_AUDIO) — normal, not a
+    // failure. Hard-coded because AudioPolicyConfigInterop.E_INVALIDARG lives on
+    // an internal class that public callers of this exception can't name.
+    private const int ProcessNoAudioHresult = unchecked((int)0x80070057);
+
+    public SourceRoutingException(string message, int hresult) : base(message)
+    {
+        HResult = hresult;
+        NoActiveAudio = hresult == ProcessNoAudioHresult;
+    }
+
+    /// True when the failure was only "this process has no audio session yet".
+    /// Callers routing a multi-process app should skip such pids rather than
+    /// treating them as a routing failure.
+    public bool NoActiveAudio { get; }
 }
 
 public interface ISourceAudioRouter
@@ -36,10 +51,10 @@ public sealed class WindowsAppAudioRouter : ISourceAudioRouter
     public AppAudioRoute GetCurrentRoute(int processId)
     {
         if (!_supported) return AppAudioRoute.None;
-        var (_, console) = AudioPolicyConfigInterop.GetEndpoint((uint)processId, ERole.eConsole);
-        var (_, multimedia) = AudioPolicyConfigInterop.GetEndpoint((uint)processId, ERole.eMultimedia);
-        var (_, comms) = AudioPolicyConfigInterop.GetEndpoint((uint)processId, ERole.eCommunications);
-        return new AppAudioRoute(console, multimedia, comms);
+        return new AppAudioRoute(
+            GetRole(processId, ERole.eConsole),
+            GetRole(processId, ERole.eMultimedia),
+            GetRole(processId, ERole.eCommunications));
     }
 
     public void RouteProcess(int processId, string renderDeviceId)
@@ -59,9 +74,44 @@ public sealed class WindowsAppAudioRouter : ISourceAudioRouter
         TrySetRole(processId, ERole.eCommunications, previous.Communications);
     }
 
+    /// Reads one role's endpoint override. "" means no override. Throws
+    /// SourceRoutingException for any real failure — a failed read must never be
+    /// mistaken for "no override", or restoring it later would wipe the user's
+    /// own per-app routing.
+    private static string GetRole(int processId, ERole role)
+    {
+        int hr;
+        string mmDeviceId;
+        try
+        {
+            (hr, mmDeviceId) = AudioPolicyConfigInterop.GetEndpoint((uint)processId, role);
+        }
+        catch (Exception ex)
+        {
+            throw new SourceRoutingException($"Reading the {role} endpoint failed: {ex.Message}", ex.HResult);
+        }
+
+        if (hr == 0) return mmDeviceId;
+        // Session-less process: genuinely has no override.
+        if (hr == AudioPolicyConfigInterop.E_INVALIDARG) return "";
+        throw new SourceRoutingException($"Reading the {role} endpoint failed (hresult 0x{hr:X}).", hr);
+    }
+
+    /// Throws SourceRoutingException with NoActiveAudio == true for a
+    /// session-less process; callers routing a multi-pid app (Spotify runs
+    /// several helper processes) should skip those pids rather than fail.
     private static void SetRole(int processId, ERole role, string mmDeviceId)
     {
-        int hr = AudioPolicyConfigInterop.SetEndpoint((uint)processId, role, mmDeviceId ?? "");
+        int hr;
+        try
+        {
+            hr = AudioPolicyConfigInterop.SetEndpoint((uint)processId, role, mmDeviceId ?? "");
+        }
+        catch (Exception ex)
+        {
+            throw new SourceRoutingException($"Setting the {role} endpoint failed: {ex.Message}", ex.HResult);
+        }
+
         if (hr == 0) return;
         if (hr == AudioPolicyConfigInterop.E_INVALIDARG)
             throw new SourceRoutingException("The source has no active audio yet — start playback in it, then Start.", hr);

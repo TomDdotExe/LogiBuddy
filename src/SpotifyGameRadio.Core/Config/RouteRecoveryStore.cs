@@ -32,12 +32,18 @@ public sealed class RouteRecoveryStore
     public RouteRecoveryRecord? Read()
     {
         if (!File.Exists(_path)) return null;
+        // Any failure (malformed JSON, a locked or unreadable file, a race with
+        // Delete) must degrade to "nothing to recover" — this runs during app
+        // construction, where a throw would take the launch down with it.
         try { return JsonSerializer.Deserialize<RouteRecoveryRecord>(File.ReadAllText(_path)); }
-        catch (JsonException) { return null; }
+        catch (Exception) { return null; }
     }
 
     public void Delete()
     {
-        if (File.Exists(_path)) File.Delete(_path);
+        // Best-effort: a locked/removed file must not throw out of Stop() or
+        // the crash-recovery path.
+        try { if (File.Exists(_path)) File.Delete(_path); }
+        catch (Exception) { /* best effort */ }
     }
 }

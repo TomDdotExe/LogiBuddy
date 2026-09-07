@@ -43,22 +43,17 @@
    Mouse Sensitivity / Max Yaw / Max Pitch to roughly match your
    in-game sensitivity and freelook angle limits — this is an
    approximation, not a memory read, so expect to tune it by ear.
-   These four settings have no UI controls yet; see Known Limitations
-   below for how to edit them.
 5. Click Start, then hold your freelook key and look around in-game —
    the radio audio should shift as if it were mounted in the vehicle.
 6. Click Save Profile to keep these settings for next time.
 
 ## Known Limitations
 
-- Most tunable settings have no UI controls yet: output device
-  selection, the freelook hotkey, mouse sensitivity, max yaw/pitch, and
+- A few settings still have no UI controls: output device selection and
   the profile name (so, profile switching too). To change them, click
   Save Profile once to create the file, then edit
   `%APPDATA%\SpotifyGameRadio\Profiles\<name>.json` directly and
   restart the app.
-- Moving a DSP slider while the radio is running has no live effect.
-  Click Stop, then Start again, to apply the change.
 - Vertical look (pitch) has no audible effect on the spatialized audio
   — only left/right (yaw) does.
 - On pre-Windows-10-20H1 systems, which use the whole-device capture
@@ -87,8 +82,9 @@ endpoint while running.
   Cable, VoiceMeeter, etc.). On Windows 10 the option is unavailable
   and Start is blocked while "Auto-route" is ticked — untick it and
   route the source manually in Windows Sound settings instead.
-- Leave the device dropdown unset to auto-detect a virtual cable, or
-  pick one explicitly. The choice is saved in the profile.
+- Leave the device dropdown on "(auto-detect virtual cable)" to have one
+  found at Start, or pick a device explicitly. The choice is saved when
+  you click Save Profile.
 - On Stop, the source's previous output device is restored. If the app
   is killed while running, the next launch restores it and shows
   "Restored source audio routing from a previous session."
