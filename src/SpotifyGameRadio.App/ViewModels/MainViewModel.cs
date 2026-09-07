@@ -20,6 +20,24 @@ public class MainViewModel : INotifyPropertyChanged
     private System.Timers.Timer? _underrunTimer;
     private TestTonePlayer? _testTone;
 
+    private static readonly HashSet<string> LiveProfileProperties = new()
+    {
+        nameof(RadioProfile.HighPassHz), nameof(RadioProfile.LowPassHz),
+        nameof(RadioProfile.DistortionDrive), nameof(RadioProfile.CompressorThresholdDb),
+        nameof(RadioProfile.CompressorRatio), nameof(RadioProfile.NoiseLevel),
+        nameof(RadioProfile.WetDryMix),
+        nameof(RadioProfile.SourceX), nameof(RadioProfile.SourceY), nameof(RadioProfile.SourceZ),
+        nameof(RadioProfile.MouseSensitivity), nameof(RadioProfile.MaxYawDegrees),
+        nameof(RadioProfile.MaxPitchDegrees), nameof(RadioProfile.SpringBackRatePerSecond),
+    };
+
+    private static readonly HashSet<string> RestartRequiredProfileProperties = new()
+    {
+        nameof(RadioProfile.SourceProcessName), nameof(RadioProfile.OutputDeviceId),
+        nameof(RadioProfile.Hotkey),
+        // AutoRouteSource / RouteSourceToDeviceId are added to this set in Task 7.
+    };
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public IReadOnlyList<AudioSourceInfo> AvailableSources { get; private set; } = Array.Empty<AudioSourceInfo>();
@@ -37,6 +55,13 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _bufferUnderrunCount;
         set { _bufferUnderrunCount = value; OnPropertyChanged(); }
+    }
+
+    private bool _restartRequired;
+    public bool RestartRequired
+    {
+        get => _restartRequired;
+        set { _restartRequired = value; OnPropertyChanged(); }
     }
 
     private bool _testToneEnabled;
@@ -86,6 +111,29 @@ public class MainViewModel : INotifyPropertyChanged
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
 
         RefreshSources();
+        Profile.PropertyChanged += OnProfilePropertyChanged;
+    }
+
+    private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is null) return;
+
+        if (LiveProfileProperties.Contains(e.PropertyName))
+        {
+            if (_pipeline is null) return;
+            try
+            {
+                _pipeline.ApplyProfile(Profile);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Couldn't apply change: {ex.Message}";
+            }
+        }
+        else if (RestartRequiredProfileProperties.Contains(e.PropertyName) && _pipeline is not null)
+        {
+            RestartRequired = true;
+        }
     }
 
     private void RefreshSources()
@@ -96,8 +144,17 @@ public class MainViewModel : INotifyPropertyChanged
 
     private void LoadProfile(string name)
     {
+        Profile.PropertyChanged -= OnProfilePropertyChanged;
         Profile = _configStore.Load(name);
+        Profile.PropertyChanged += OnProfilePropertyChanged;
         OnPropertyChanged(nameof(Profile));
+
+        if (_pipeline is not null)
+        {
+            try { _pipeline.ApplyProfile(Profile); }
+            catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
+            RestartRequired = true;
+        }
     }
 
     private void Start()
@@ -183,6 +240,7 @@ public class MainViewModel : INotifyPropertyChanged
                 if (_pipeline is not null) BufferUnderrunCount = _pipeline.BufferUnderrunCount;
             });
             _underrunTimer.Start();
+            RestartRequired = false;
         }
         catch (Exception ex)
         {
@@ -211,6 +269,7 @@ public class MainViewModel : INotifyPropertyChanged
         _pipeline = null;
         _mouseHook = null;
         StatusMessage = "Stopped";
+        RestartRequired = false;
     }
 
     /// Called from MainWindow.OnClosed so the test tone never outlives the window.
