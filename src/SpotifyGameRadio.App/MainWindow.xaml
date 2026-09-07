@@ -3,23 +3,31 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
         xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
-        Title="Spotify Game Radio" Height="760" Width="640">
+        Title="Spotify Game Radio" Height="900" Width="640">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
     <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" /> <!-- 0 source -->
+            <RowDefinition Height="Auto" /> <!-- 1 high-pass -->
+            <RowDefinition Height="Auto" /> <!-- 2 low-pass -->
+            <RowDefinition Height="Auto" /> <!-- 3 distortion -->
+            <RowDefinition Height="Auto" /> <!-- 4 comp thresh -->
+            <RowDefinition Height="Auto" /> <!-- 5 comp ratio -->
+            <RowDefinition Height="Auto" /> <!-- 6 noise -->
+            <RowDefinition Height="Auto" /> <!-- 7 wet/dry -->
+            <RowDefinition Height="Auto" /> <!-- 8 freelook hotkey -->
+            <RowDefinition Height="Auto" /> <!-- 9 mouse sensitivity -->
+            <RowDefinition Height="Auto" /> <!-- 10 max yaw -->
+            <RowDefinition Height="Auto" /> <!-- 11 max pitch -->
+            <RowDefinition Height="Auto" /> <!-- 12 spring-back -->
+            <RowDefinition Height="Auto" /> <!-- 13 buttons + restart hint -->
+            <RowDefinition Height="Auto" /> <!-- 14 canvas -->
+            <RowDefinition Height="*" />    <!-- 15 status -->
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -33,52 +41,81 @@
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="High-pass (Hz):" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="High-pass (Hz):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="50" Maximum="2000" Width="200" Value="{Binding Profile.HighPassHz}" />
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Low-pass (Hz):" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Low-pass (Hz):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="1000" Maximum="8000" Width="200" Value="{Binding Profile.LowPassHz}" />
         </StackPanel>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Distortion:" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Distortion:" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Profile.DistortionDrive}" />
         </StackPanel>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Compressor Thresh (dB):" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Compressor Thresh (dB):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="-40" Maximum="0" Width="200" Value="{Binding Profile.CompressorThresholdDb}" />
         </StackPanel>
 
         <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Compressor Ratio:" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Compressor Ratio:" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="1" Maximum="20" Width="200" Value="{Binding Profile.CompressorRatio}" />
         </StackPanel>
 
         <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Static/Noise:" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Static/Noise:" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="0.3" Width="200" Value="{Binding Profile.NoiseLevel}" />
         </StackPanel>
 
         <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Wet/Dry Mix:" VerticalAlignment="Center" Width="120" />
+            <TextBlock Text="Wet/Dry Mix:" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="1" Width="200" Value="{Binding Profile.WetDryMix}" />
         </StackPanel>
 
         <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Freelook hotkey:" VerticalAlignment="Center" Width="140" />
+            <controls:HotkeyCaptureControl Hotkey="{Binding Profile.Hotkey, Mode=TwoWay}" />
+            <TextBlock Text=" restart to apply" VerticalAlignment="Center" Foreground="DarkOrange" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Mouse sensitivity:" VerticalAlignment="Center" Width="140" />
+            <Slider Minimum="0.01" Maximum="1.0" Width="200" Value="{Binding Profile.MouseSensitivity}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Max yaw (°):" VerticalAlignment="Center" Width="140" />
+            <Slider Minimum="0" Maximum="180" Width="200" Value="{Binding Profile.MaxYawDegrees}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="11" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Max pitch (°):" VerticalAlignment="Center" Width="140" />
+            <Slider Minimum="0" Maximum="90" Width="200" Value="{Binding Profile.MaxPitchDegrees}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="12" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Spring-back (°/s):" VerticalAlignment="Center" Width="140" />
+            <Slider Minimum="0" Maximum="2000" Width="200" Value="{Binding Profile.SpringBackRatePerSecond}" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="13" Orientation="Horizontal" Margin="0,0,0,8">
             <Button Content="Start" Command="{Binding StartCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Stop" Command="{Binding StopCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="100" />
+            <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="DarkOrange"
+                       Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}"
+                       Text="Restart (Stop then Start) to apply source / output / hotkey changes." />
         </StackPanel>
 
-        <controls:SourcePositionCanvas Grid.Row="9"
+        <controls:SourcePositionCanvas Grid.Row="14"
             SourceX="{Binding Profile.SourceX}"
             SourceZ="{Binding Profile.SourceZ}"
             HorizontalAlignment="Left" />
 
-        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Top">
+        <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">
             <TextBlock Text="{Binding StatusMessage}" FontWeight="Bold" TextWrapping="Wrap" MaxWidth="400" />
             <TextBlock Text="{Binding BufferUnderrunCount, StringFormat=' (underruns: {0})'}" Margin="8,0,0,0" />
         </StackPanel>
