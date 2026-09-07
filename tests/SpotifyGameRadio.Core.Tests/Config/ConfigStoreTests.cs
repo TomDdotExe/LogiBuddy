@@ -92,4 +92,27 @@ public class ConfigStoreTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public void Load_ProfileJsonMissingNewerFields_KeepsDefaults()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dir, "Legacy.json"),
+                "{ \"Name\": \"Legacy\", \"HighPassHz\": 600 }");
+
+            var loaded = store.Load("Legacy");
+
+            Assert.Equal("Legacy", loaded.Name);
+            Assert.Equal(600f, loaded.HighPassHz);
+            Assert.Equal(1.0f, loaded.WetDryMix);           // default retained
+            Assert.Equal(0x12, loaded.Hotkey.VirtualKeyCode); // default retained
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

@@ -1,27 +1,58 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace SpotifyGameRadio.Core.Config;
 
-public class RadioProfile
+public class RadioProfile : INotifyPropertyChanged
 {
-    public string Name { get; set; } = "Default";
-    public string SourceProcessName { get; set; } = "";
-    public string OutputDeviceId { get; set; } = "";
+    private string _name = "Default";
+    private string _sourceProcessName = "";
+    private string _outputDeviceId = "";
+    private float _sourceX = 0.3f;
+    private float _sourceY = -0.1f;
+    private float _sourceZ = 0.2f;
+    private float _highPassHz = 400f;
+    private float _lowPassHz = 3400f;
+    private float _distortionDrive = 0.2f;
+    private float _compressorThresholdDb = -18f;
+    private float _compressorRatio = 4f;
+    private float _noiseLevel = 0.05f;
+    private float _wetDryMix = 1.0f;
+    private FreelookHotkey _hotkey = new();
+    private float _mouseSensitivity = 0.15f;
+    private float _maxYawDegrees = 90f;
+    private float _maxPitchDegrees = 60f;
+    private float _springBackRatePerSecond = 720f;
+
+    public string Name { get => _name; set => SetField(ref _name, value); }
+    public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
+    public string OutputDeviceId { get => _outputDeviceId; set => SetField(ref _outputDeviceId, value); }
 
     // Fixed source position in listener-relative meters: +X right, +Y up, +Z forward.
-    public float SourceX { get; set; } = 0.3f;
-    public float SourceY { get; set; } = -0.1f;
-    public float SourceZ { get; set; } = 0.2f;
+    public float SourceX { get => _sourceX; set => SetField(ref _sourceX, value); }
+    public float SourceY { get => _sourceY; set => SetField(ref _sourceY, value); }
+    public float SourceZ { get => _sourceZ; set => SetField(ref _sourceZ, value); }
 
-    public float HighPassHz { get; set; } = 400f;
-    public float LowPassHz { get; set; } = 3400f;
-    public float DistortionDrive { get; set; } = 0.2f;
-    public float CompressorThresholdDb { get; set; } = -18f;
-    public float CompressorRatio { get; set; } = 4f;
-    public float NoiseLevel { get; set; } = 0.05f;
-    public float WetDryMix { get; set; } = 1.0f;
+    public float HighPassHz { get => _highPassHz; set => SetField(ref _highPassHz, value); }
+    public float LowPassHz { get => _lowPassHz; set => SetField(ref _lowPassHz, value); }
+    public float DistortionDrive { get => _distortionDrive; set => SetField(ref _distortionDrive, value); }
+    public float CompressorThresholdDb { get => _compressorThresholdDb; set => SetField(ref _compressorThresholdDb, value); }
+    public float CompressorRatio { get => _compressorRatio; set => SetField(ref _compressorRatio, value); }
+    public float NoiseLevel { get => _noiseLevel; set => SetField(ref _noiseLevel, value); }
+    public float WetDryMix { get => _wetDryMix; set => SetField(ref _wetDryMix, value); }
 
-    public FreelookHotkey Hotkey { get; set; } = new();
-    public float MouseSensitivity { get; set; } = 0.15f; // degrees per mouse count
-    public float MaxYawDegrees { get; set; } = 90f;
-    public float MaxPitchDegrees { get; set; } = 60f;
-    public float SpringBackRatePerSecond { get; set; } = 720f;
+    public FreelookHotkey Hotkey { get => _hotkey; set => SetField(ref _hotkey, value); }
+    public float MouseSensitivity { get => _mouseSensitivity; set => SetField(ref _mouseSensitivity, value); }
+    public float MaxYawDegrees { get => _maxYawDegrees; set => SetField(ref _maxYawDegrees, value); }
+    public float MaxPitchDegrees { get => _maxPitchDegrees; set => SetField(ref _maxPitchDegrees, value); }
+    public float SpringBackRatePerSecond { get => _springBackRatePerSecond; set => SetField(ref _springBackRatePerSecond, value); }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
