@@ -65,3 +65,32 @@
   fallback, choosing an audio source on the same device you're playing
   back to can create a feedback loop. Use headphones and/or route the
   source to a different device if you hit this.
+
+## Real-time editing
+
+While the pipeline is running, these apply instantly (no Stop/Start):
+DSP sliders (high/low-pass, distortion, compressor, static, wet/dry),
+the source-position marker, and the freelook tuning sliders (mouse
+sensitivity, max yaw/pitch, spring-back).
+
+These need a Stop then Start — the window shows an orange "restart to
+apply" hint when you change one while running: Source process, Output
+device, the freelook hotkey, and the auto-routing settings.
+
+## Source audio routing
+
+To stop hearing the raw source (e.g. Spotify) alongside the processed
+radio, the app routes the source app's output to a silent render
+endpoint while running.
+
+- Requires Windows 11 and a virtual audio device (VB-Audio Virtual
+  Cable, VoiceMeeter, etc.). On Windows 10 the option is unavailable
+  and Start is blocked while "Auto-route" is ticked — untick it and
+  route the source manually in Windows Sound settings instead.
+- Leave the device dropdown unset to auto-detect a virtual cable, or
+  pick one explicitly. The choice is saved in the profile.
+- On Stop, the source's previous output device is restored. If the app
+  is killed while running, the next launch restores it and shows
+  "Restored source audio routing from a previous session."
+- "Reset routing" forces the restore if anything is left pointing at
+  the cable.
