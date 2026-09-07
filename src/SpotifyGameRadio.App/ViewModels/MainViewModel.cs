@@ -35,7 +35,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         nameof(RadioProfile.SourceProcessName), nameof(RadioProfile.OutputDeviceId),
         nameof(RadioProfile.Hotkey),
-        // AutoRouteSource / RouteSourceToDeviceId are added to this set in Task 7.
+        nameof(RadioProfile.AutoRouteSource), nameof(RadioProfile.RouteSourceToDeviceId),
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;

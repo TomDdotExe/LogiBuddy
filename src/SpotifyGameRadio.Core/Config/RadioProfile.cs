@@ -19,10 +19,12 @@ public class RadioProfile : INotifyPropertyChanged
     private float _noiseLevel = 0.05f;
     private float _wetDryMix = 1.0f;
     private FreelookHotkey _hotkey = new();
-    private float _mouseSensitivity = 0.15f;
+    private float _mouseSensitivity = 0.15f; // degrees per mouse count
     private float _maxYawDegrees = 90f;
     private float _maxPitchDegrees = 60f;
     private float _springBackRatePerSecond = 720f;
+    private bool _autoRouteSource = true;
+    private string _routeSourceToDeviceId = "";
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -46,6 +48,15 @@ public class RadioProfile : INotifyPropertyChanged
     public float MaxYawDegrees { get => _maxYawDegrees; set => SetField(ref _maxYawDegrees, value); }
     public float MaxPitchDegrees { get => _maxPitchDegrees; set => SetField(ref _maxPitchDegrees, value); }
     public float SpringBackRatePerSecond { get => _springBackRatePerSecond; set => SetField(ref _springBackRatePerSecond, value); }
+
+    /// When true, MainViewModel routes the source process's audio to
+    /// RouteSourceToDeviceId (or an auto-detected virtual cable) on Start and
+    /// restores it on Stop, so only the processed radio output is audible.
+    public bool AutoRouteSource { get => _autoRouteSource; set => SetField(ref _autoRouteSource, value); }
+
+    /// MMDevice id of the render endpoint to route the source to. Empty means
+    /// "auto-detect a virtual cable at Start".
+    public string RouteSourceToDeviceId { get => _routeSourceToDeviceId; set => SetField(ref _routeSourceToDeviceId, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
