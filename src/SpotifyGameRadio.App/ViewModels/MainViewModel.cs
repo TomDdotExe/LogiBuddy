@@ -32,6 +32,8 @@ public class MainViewModel : INotifyPropertyChanged
         nameof(RadioProfile.SourceX), nameof(RadioProfile.SourceY), nameof(RadioProfile.SourceZ),
         nameof(RadioProfile.MouseSensitivity), nameof(RadioProfile.MaxYawDegrees),
         nameof(RadioProfile.MaxPitchDegrees), nameof(RadioProfile.SpringBackRatePerSecond),
+        nameof(RadioProfile.Volume), nameof(RadioProfile.StereoWidth),
+        nameof(RadioProfile.FreelookAlwaysOn),
     };
 
     // Hotkey and OutputDeviceId are applied live (see OnProfilePropertyChanged);
@@ -124,6 +126,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand SaveProfileCommand { get; }
     public ICommand LoadProfileCommand { get; }
     public ICommand ResetSourceRoutingCommand { get; }
+    public ICommand RecenterCommand { get; }
 
     public MainViewModel()
     {
@@ -138,6 +141,13 @@ public class MainViewModel : INotifyPropertyChanged
         SaveProfileCommand = new RelayCommand(_ => _configStore.Save(Profile));
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
         ResetSourceRoutingCommand = new RelayCommand(_ => ResetSourceRouting());
+        RecenterCommand = new RelayCommand(_ =>
+        {
+            _pipeline?.RecenterListener();
+            // Snap the marker now rather than waiting for the next ~30 Hz tick.
+            ListenerYaw = 0;
+            ListenerPitch = 0;
+        });
 
         RefreshSources();
         Profile.PropertyChanged += OnProfilePropertyChanged;
