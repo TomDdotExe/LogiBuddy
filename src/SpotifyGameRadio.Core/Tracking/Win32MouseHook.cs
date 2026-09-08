@@ -42,7 +42,8 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 
     private readonly LowLevelMouseProc _proc;
-    private readonly FreelookHotkey _hotkey;
+    // Swapped live by SetHotkey; PollHotkeyState re-reads it every iteration.
+    private volatile FreelookHotkey _hotkey;
     private readonly Thread _hookThread;
     private readonly Thread _hotkeyPollThread;
     private IntPtr _hookHandle = IntPtr.Zero;
@@ -52,6 +53,10 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
 
     public bool IsHotkeyHeld { get; private set; }
     public event Action<int, int>? MouseMoved;
+
+    /// Rebinds the freelook key without reinstalling the hook. The poll thread
+    /// reads the new value on its next iteration (~8 ms).
+    public void SetHotkey(FreelookHotkey hotkey) => _hotkey = hotkey;
 
     /// Thrown if the low-level hook could not be installed (e.g. blocked by policy/AV).
     public bool HookInstalled { get; private set; }

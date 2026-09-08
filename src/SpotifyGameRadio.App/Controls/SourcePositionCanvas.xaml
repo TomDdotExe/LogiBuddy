@@ -4,13 +4,25 @@
              Width="200" Height="200">
     <Border BorderBrush="Gray" BorderThickness="1" Background="#111">
         <!-- Background="Transparent" is required: a Canvas with a null Background is
-             not hit-testable over its empty area, and both children below are
+             not hit-testable over its empty area, and every child below is
              IsHitTestVisible="False", so without this neither mouse handler could
              ever fire. The Border's #111 background still shows through. -->
         <Canvas x:Name="PlacementCanvas" Background="Transparent"
                 MouseLeftButtonDown="OnCanvasMouseDown" MouseMove="OnCanvasMouseMove">
-            <!-- Listener marker fixed at center, facing up (forward = -Y on screen). -->
-            <Ellipse Width="10" Height="10" Fill="White" Canvas.Left="95" Canvas.Top="95" IsHitTestVisible="False" />
+            <!-- Listener facing arrow, centred on (100,100). At rest it points up
+                 (forward = up on screen). ListenerYawRotate spins it with the
+                 freelook yaw (WPF positive angle = clockwise = looking right);
+                 ListenerPitchScale foreshortens it as the user looks up/down. -->
+            <Polygon Points="100,84 92,106 108,106" Fill="White" IsHitTestVisible="False">
+                <Polygon.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="ListenerPitchScale" CenterX="100" CenterY="100" ScaleY="1" />
+                        <RotateTransform x:Name="ListenerYawRotate" CenterX="100" CenterY="100" Angle="0" />
+                    </TransformGroup>
+                </Polygon.RenderTransform>
+            </Polygon>
+            <!-- Fixed pip marking the listener's actual position. -->
+            <Ellipse Width="6" Height="6" Fill="White" Canvas.Left="97" Canvas.Top="97" IsHitTestVisible="False" />
             <Ellipse x:Name="SourceMarker" Width="14" Height="14" Fill="Orange"
                      Canvas.Left="93" Canvas.Top="93" IsHitTestVisible="False" />
         </Canvas>

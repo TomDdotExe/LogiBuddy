@@ -40,6 +40,12 @@ public class RadioPipeline : IDisposable
     public int BufferUnderrunCount { get; private set; }
     public event EventHandler<string>? Warning;
 
+    /// Current freelook listener orientation, updated by the mouse hook as the
+    /// user looks around. Exposed for a live UI readout; the audio thread reads
+    /// the tracker directly.
+    public float ListenerYawDegrees => _tracker.YawDegrees;
+    public float ListenerPitchDegrees => _tracker.PitchDegrees;
+
     public RadioPipeline(
         IAudioCaptureService capture,
         IAudioOutputService output,
@@ -94,6 +100,16 @@ public class RadioPipeline : IDisposable
     {
         _capture.Stop();
         _output.Stop();
+    }
+
+    /// Switches playback to a different render device without disturbing capture,
+    /// the effect chain, or the input hook. WasapiAudioOutput.Start tears down
+    /// and rebuilds internally, the same restart the DeviceLost path performs,
+    /// so a brief gap in audio is expected. Safe to call on a running pipeline
+    /// from the UI thread — Write() null-checks its buffer.
+    public void SetOutputDevice(string deviceId)
+    {
+        _output.Start(deviceId);
     }
 
     private void OnDataAvailable(object? sender, float[] interleavedSamples)

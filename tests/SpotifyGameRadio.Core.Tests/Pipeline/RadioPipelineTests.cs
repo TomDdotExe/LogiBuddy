@@ -33,8 +33,10 @@ public class FakeOutputService : IAudioOutputService
 {
     public event EventHandler? DeviceLost;
     public List<float[]> WrittenBuffers { get; } = new();
+    public List<string> StartedDeviceIds { get; } = new();
+    public string? LastDeviceId => StartedDeviceIds.Count == 0 ? null : StartedDeviceIds[^1];
 
-    public void Start(string deviceId) { }
+    public void Start(string deviceId) => StartedDeviceIds.Add(deviceId);
     public void Write(float[] stereoInterleaved, int count) => WrittenBuffers.Add(stereoInterleaved[..(count)]);
     public void Stop() { }
     public void Dispose() { }
@@ -182,6 +184,39 @@ public class RadioPipelineTests
         Assert.Equal(
             new float[] { 0.1f, 0.1f, 0.2f, 0.2f, 0.3f, 0.3f, 0.4f, 0.4f },
             output.WrittenBuffers[0]);
+    }
+
+    [Fact]
+    public void SetOutputDevice_RestartsOutputWithTheNewDeviceId()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _);
+        pipeline.Start();
+
+        pipeline.SetOutputDevice("{0.0.0.00000000}.{new-device}");
+
+        Assert.Equal("{0.0.0.00000000}.{new-device}", output.LastDeviceId);
+    }
+
+    [Fact]
+    public void ListenerYawAndPitch_ReflectTheTrackerAfterFreelookInput()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
+        var tracker = new FreelookTracker(input, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new FakeSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        input.RaiseMove(dx: 300, dy: 100);
+
+        Assert.Equal(30f, pipeline.ListenerYawDegrees, precision: 3);   // 300 * 0.1
+        Assert.Equal(10f, pipeline.ListenerPitchDegrees, precision: 3); // 100 * 0.1
     }
 
     [Fact]

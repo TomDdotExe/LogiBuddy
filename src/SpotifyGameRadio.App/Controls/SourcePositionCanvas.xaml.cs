@@ -26,6 +26,28 @@ public partial class SourcePositionCanvas : UserControl
         set => SetValue(SourceZProperty, value);
     }
 
+    public static readonly DependencyProperty ListenerYawProperty = DependencyProperty.Register(
+        nameof(ListenerYaw), typeof(double), typeof(SourcePositionCanvas),
+        new FrameworkPropertyMetadata(0.0, OnListenerChanged));
+
+    public static readonly DependencyProperty ListenerPitchProperty = DependencyProperty.Register(
+        nameof(ListenerPitch), typeof(double), typeof(SourcePositionCanvas),
+        new FrameworkPropertyMetadata(0.0, OnListenerChanged));
+
+    /// Freelook yaw in degrees; rotates the listener arrow (positive = looking right).
+    public double ListenerYaw
+    {
+        get => (double)GetValue(ListenerYawProperty);
+        set => SetValue(ListenerYawProperty, value);
+    }
+
+    /// Freelook pitch in degrees; foreshortens the listener arrow as its magnitude grows.
+    public double ListenerPitch
+    {
+        get => (double)GetValue(ListenerPitchProperty);
+        set => SetValue(ListenerPitchProperty, value);
+    }
+
     private const double MetersPerPixel = 0.02; // 100px = 2 meters from center each way
     private const double CenterPixel = 100;
     private bool _dragging;
@@ -38,6 +60,19 @@ public partial class SourcePositionCanvas : UserControl
     private static void OnPositionChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         ((SourcePositionCanvas)d).UpdateMarkerFromProperties();
+    }
+
+    private static void OnListenerChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        ((SourcePositionCanvas)d).UpdateListenerArrow();
+    }
+
+    private void UpdateListenerArrow()
+    {
+        ListenerYawRotate.Angle = ListenerYaw;
+        // 1.0 facing level, easing to ~0.45 at 90 degrees up or down.
+        double pitchFraction = Math.Min(Math.Abs(ListenerPitch), 90.0) / 90.0;
+        ListenerPitchScale.ScaleY = 1.0 - 0.55 * pitchFraction;
     }
 
     private void UpdateMarkerFromProperties()

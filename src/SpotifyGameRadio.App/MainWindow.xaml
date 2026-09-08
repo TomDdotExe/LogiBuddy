@@ -54,7 +54,8 @@
                       IsEnabled="{Binding IsChecked, ElementName=AutoRouteCheck}"
                       ToolTip="Leave unset to auto-detect a virtual cable at Start." />
             <Button Content="Reset routing" Command="{Binding ResetSourceRoutingCommand}" Margin="8,0,0,0" />
-            <TextBlock Text=" restart to apply" VerticalAlignment="Center" Foreground="DarkOrange" Margin="8,0,0,0" />
+            <TextBlock Text=" restart to apply" VerticalAlignment="Center" Foreground="DarkOrange" Margin="8,0,0,0"
+                       Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}" />
         </StackPanel>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
@@ -95,7 +96,6 @@
         <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Freelook hotkey:" VerticalAlignment="Center" Width="140" />
             <controls:HotkeyCaptureControl Hotkey="{Binding Profile.Hotkey, Mode=TwoWay}" />
-            <TextBlock Text=" restart to apply" VerticalAlignment="Center" Foreground="DarkOrange" Margin="8,0,0,0" />
         </StackPanel>
 
         <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,0,0,8">
@@ -124,12 +124,14 @@
             <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="100" />
             <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="DarkOrange"
                        Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}"
-                       Text="Restart (Stop then Start) to apply source / output / hotkey changes." />
+                       Text="Restart (Stop then Start) to apply source / routing changes." />
         </StackPanel>
 
         <controls:SourcePositionCanvas Grid.Row="15"
             SourceX="{Binding Profile.SourceX}"
             SourceZ="{Binding Profile.SourceZ}"
+            ListenerYaw="{Binding ListenerYaw}"
+            ListenerPitch="{Binding ListenerPitch}"
             HorizontalAlignment="Left" />
 
         <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">

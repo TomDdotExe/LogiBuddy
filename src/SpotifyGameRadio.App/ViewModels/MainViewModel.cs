@@ -20,7 +20,7 @@ public class MainViewModel : INotifyPropertyChanged
     private RouteRecoveryRecord? _activeRouteRecovery;
     private RadioPipeline? _pipeline;
     private Win32MouseHook? _mouseHook;
-    private System.Timers.Timer? _underrunTimer;
+    private System.Windows.Threading.DispatcherTimer? _uiTimer;
     private TestTonePlayer? _testTone;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
@@ -34,10 +34,12 @@ public class MainViewModel : INotifyPropertyChanged
         nameof(RadioProfile.MaxPitchDegrees), nameof(RadioProfile.SpringBackRatePerSecond),
     };
 
+    // Hotkey and OutputDeviceId are applied live (see OnProfilePropertyChanged);
+    // these still need a Stop/Start because capture is bound to the source
+    // process and routing is set up in Start().
     private static readonly HashSet<string> RestartRequiredProfileProperties = new()
     {
-        nameof(RadioProfile.SourceProcessName), nameof(RadioProfile.OutputDeviceId),
-        nameof(RadioProfile.Hotkey),
+        nameof(RadioProfile.SourceProcessName),
         nameof(RadioProfile.AutoRouteSource), nameof(RadioProfile.RouteSourceToDeviceId),
     };
 
@@ -66,6 +68,22 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _restartRequired;
         set { _restartRequired = value; OnPropertyChanged(); }
+    }
+
+    // Live freelook orientation, polled from the pipeline by _uiTimer while
+    // running and bound by SourcePositionCanvas to rotate the listener marker.
+    private double _listenerYaw;
+    public double ListenerYaw
+    {
+        get => _listenerYaw;
+        set { if (value == _listenerYaw) return; _listenerYaw = value; OnPropertyChanged(); }
+    }
+
+    private double _listenerPitch;
+    public double ListenerPitch
+    {
+        get => _listenerPitch;
+        set { if (value == _listenerPitch) return; _listenerPitch = value; OnPropertyChanged(); }
     }
 
     private bool _testToneEnabled;
@@ -160,6 +178,23 @@ public class MainViewModel : INotifyPropertyChanged
                 StatusMessage = $"Couldn't apply change: {ex.Message}";
             }
         }
+        else if (e.PropertyName == nameof(RadioProfile.Hotkey))
+        {
+            // Applies to the running hook immediately; also picked up by the
+            // next Start() since it reads Profile.Hotkey when building the hook.
+            _mouseHook?.SetHotkey(Profile.Hotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
+        {
+            try
+            {
+                _pipeline.SetOutputDevice(Profile.OutputDeviceId);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Couldn't switch output device: {ex.Message}";
+            }
+        }
         else if (RestartRequiredProfileProperties.Contains(e.PropertyName) && _pipeline is not null)
         {
             RestartRequired = true;
@@ -189,8 +224,14 @@ public class MainViewModel : INotifyPropertyChanged
 
         if (_pipeline is not null)
         {
-            try { _pipeline.ApplyProfile(Profile); }
+            try
+            {
+                _pipeline.ApplyProfile(Profile);
+                _pipeline.SetOutputDevice(Profile.OutputDeviceId);
+                _mouseHook?.SetHotkey(Profile.Hotkey);
+            }
             catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
+            // Source process and routing still need a manual Stop/Start.
             RestartRequired = true;
         }
     }
@@ -460,18 +501,23 @@ public class MainViewModel : INotifyPropertyChanged
             if (primary == fallback)
                 StatusMessage = "HRTF unavailable — using simple stereo panning.";
 
-            // Stop/dispose any previous instance first so a Start->Stop->Start
-            // cycle can't leak a perpetually-firing timer (AutoReset defaults
-            // to true here, unlike the self-limiting hookCheckTimer above) —
-            // same idempotent-restart pattern as WasapiAudioOutput.Start().
-            _underrunTimer?.Stop();
-            _underrunTimer?.Dispose();
-            _underrunTimer = new System.Timers.Timer(1000);
-            _underrunTimer.Elapsed += (_, _) => Application.Current.Dispatcher.Invoke(() =>
+            // One ~30 Hz UI-thread timer drives both the underrun readout and the
+            // live freelook orientation marker. DispatcherTimer ticks on the UI
+            // thread, so no marshalling is needed. Stopped and nulled in Stop();
+            // rebuilt here so a Start->Stop->Start cycle can't leak one.
+            _uiTimer?.Stop();
+            _uiTimer = new System.Windows.Threading.DispatcherTimer
             {
-                if (_pipeline is not null) BufferUnderrunCount = _pipeline.BufferUnderrunCount;
-            });
-            _underrunTimer.Start();
+                Interval = TimeSpan.FromMilliseconds(33)
+            };
+            _uiTimer.Tick += (_, _) =>
+            {
+                if (_pipeline is null) return;
+                BufferUnderrunCount = _pipeline.BufferUnderrunCount;
+                ListenerYaw = _pipeline.ListenerYawDegrees;
+                ListenerPitch = _pipeline.ListenerPitchDegrees;
+            };
+            _uiTimer.Start();
             RestartRequired = false;
         }
         catch (Exception ex)
@@ -497,9 +543,8 @@ public class MainViewModel : INotifyPropertyChanged
         // every Start->Stop->Start cycle.
         _pipeline?.Dispose();
         _mouseHook?.Dispose();
-        _underrunTimer?.Stop();
-        _underrunTimer?.Dispose();
-        _underrunTimer = null;
+        _uiTimer?.Stop();
+        _uiTimer = null;
         // Cleared so StartCommand.CanExecute goes true again and a fresh
         // Start() builds a new stack rather than stacking on a live one.
         _pipeline = null;
@@ -507,6 +552,9 @@ public class MainViewModel : INotifyPropertyChanged
         RestoreSourceRouting();
         StatusMessage = "Stopped";
         RestartRequired = false;
+        // Snap the freelook marker back to centre now that nothing is polling it.
+        ListenerYaw = 0;
+        ListenerPitch = 0;
     }
 
     /// Called from MainWindow.OnClosed so the test tone never outlives the window.
