@@ -52,6 +52,9 @@ public class RadioPipeline : IDisposable
     public float ListenerYawDegrees => _tracker.YawDegrees;
     public float ListenerPitchDegrees => _tracker.PitchDegrees;
 
+    /// Snaps the freelook listener orientation back to forward. Safe on the UI thread.
+    public void RecenterListener() => _tracker.Recenter();
+
     public RadioPipeline(
         IAudioCaptureService capture,
         IAudioOutputService output,

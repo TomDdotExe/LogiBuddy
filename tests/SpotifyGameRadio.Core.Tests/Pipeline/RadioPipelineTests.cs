@@ -271,6 +271,27 @@ public class RadioPipelineTests
     }
 
     [Fact]
+    public void RecenterListener_ReturnsOrientationToZero()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
+        var tracker = new FreelookTracker(input, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spat = new FakeSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spat, spat, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+        input.RaiseMove(dx: 300, dy: 100);
+
+        pipeline.RecenterListener();
+
+        Assert.Equal(0f, pipeline.ListenerYawDegrees);
+        Assert.Equal(0f, pipeline.ListenerPitchDegrees);
+    }
+
+    [Fact]
     public void ApplyProfile_AfterStart_PushesUpdatedSourcePositionToSpatializer()
     {
         var capture = new FakeCaptureService();
