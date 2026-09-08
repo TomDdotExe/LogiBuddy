@@ -22,9 +22,19 @@ public class FreelookTracker
         _profile = profile;
     }
 
+    /// Zeroes the listener orientation (faces forward again). Called from the UI
+    /// thread; the audio thread's per-block read of YawDegrees/PitchDegrees is
+    /// two atomic float reads, so the worst case is one block with one axis
+    /// already zeroed and the other not — inaudible.
+    public void Recenter()
+    {
+        YawDegrees = 0f;
+        PitchDegrees = 0f;
+    }
+
     private void OnMouseMoved(int deltaX, int deltaY)
     {
-        if (!_inputSource.IsHotkeyHeld) return;
+        if (!_profile.FreelookAlwaysOn && !_inputSource.IsHotkeyHeld) return;
 
         YawDegrees = Clamp(YawDegrees + deltaX * _profile.MouseSensitivity, _profile.MaxYawDegrees);
         PitchDegrees = Clamp(PitchDegrees + deltaY * _profile.MouseSensitivity, _profile.MaxPitchDegrees);
@@ -34,7 +44,7 @@ public class FreelookTracker
     /// center when the freelook hotkey is not held, mirroring in-game snap-back.
     public void Update(float deltaSeconds)
     {
-        if (_inputSource.IsHotkeyHeld) return;
+        if (_profile.FreelookAlwaysOn || _inputSource.IsHotkeyHeld) return;
 
         float step = _profile.SpringBackRatePerSecond * deltaSeconds;
         YawDegrees = SpringTowardZero(YawDegrees, step);

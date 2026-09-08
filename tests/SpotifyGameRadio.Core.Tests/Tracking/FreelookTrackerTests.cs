@@ -71,6 +71,47 @@ public class FreelookTrackerTests
     }
 
     [Fact]
+    public void AlwaysOn_TracksMovementWithHotkeyNotHeld()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = false };
+        var profile = MakeProfile();
+        profile.FreelookAlwaysOn = true;
+        var tracker = new FreelookTracker(input, profile);
+
+        input.RaiseMove(dx: 50, dy: 20);
+
+        Assert.Equal(5f, tracker.YawDegrees, precision: 3);
+        Assert.Equal(2f, tracker.PitchDegrees, precision: 3);
+    }
+
+    [Fact]
+    public void AlwaysOn_UpdateDoesNotSpringBack()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = false };
+        var profile = MakeProfile();
+        profile.FreelookAlwaysOn = true;
+        var tracker = new FreelookTracker(input, profile);
+        input.RaiseMove(dx: 100, dy: 0); // yaw = 10
+
+        tracker.Update(deltaSeconds: 1f);
+
+        Assert.Equal(10f, tracker.YawDegrees, precision: 3);
+    }
+
+    [Fact]
+    public void Recenter_ZeroesYawAndPitch()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        var tracker = new FreelookTracker(input, MakeProfile());
+        input.RaiseMove(dx: 200, dy: 100);
+
+        tracker.Recenter();
+
+        Assert.Equal(0f, tracker.YawDegrees);
+        Assert.Equal(0f, tracker.PitchDegrees);
+    }
+
+    [Fact]
     public void Update_SpringBack_NeverOvershootsZero()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
