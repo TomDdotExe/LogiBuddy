@@ -115,6 +115,9 @@ public class ConfigStoreTests
             Assert.Equal(0x12, loaded.Hotkey.VirtualKeyCode); // default retained
             Assert.True(loaded.AutoRouteSource);            // default retained
             Assert.Equal("", loaded.RouteSourceToDeviceId); // default retained
+            Assert.Equal(1.0f, loaded.Volume);             // default retained
+            Assert.Equal(1.0f, loaded.StereoWidth);        // default retained
+            Assert.False(loaded.FreelookAlwaysOn);          // default retained
         }
         finally
         {

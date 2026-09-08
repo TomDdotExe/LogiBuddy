@@ -25,6 +25,9 @@ public class RadioProfile : INotifyPropertyChanged
     private float _springBackRatePerSecond = 720f;
     private bool _autoRouteSource = true;
     private string _routeSourceToDeviceId = "";
+    private float _volume = 1.0f;
+    private float _stereoWidth = 1.0f;
+    private bool _freelookAlwaysOn;
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -57,6 +60,16 @@ public class RadioProfile : INotifyPropertyChanged
     /// MMDevice id of the render endpoint to route the source to. Empty means
     /// "auto-detect a virtual cable at Start".
     public string RouteSourceToDeviceId { get => _routeSourceToDeviceId; set => SetField(ref _routeSourceToDeviceId, value); }
+
+    /// Master output attenuation, 0..1. Applied after StereoWidth, before output.
+    public float Volume { get => _volume; set => SetField(ref _volume, value); }
+
+    /// Mid/side stereo width. 0 = mono point source, 1 = unchanged, >1 = wider.
+    public float StereoWidth { get => _stereoWidth; set => SetField(ref _stereoWidth, value); }
+
+    /// When true, freelook tracks the mouse continuously (no hold-to-look) and
+    /// does not spring back to centre.
+    public bool FreelookAlwaysOn { get => _freelookAlwaysOn; set => SetField(ref _freelookAlwaysOn, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
