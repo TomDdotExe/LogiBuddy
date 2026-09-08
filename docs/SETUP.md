@@ -2,7 +2,10 @@
 
 ## Requirements
 - Windows 10 20H1 (build 19041) or later for per-process audio capture.
-  Older Windows falls back to whole-device capture automatically.
+  Older Windows falls back to whole-device capture automatically, and so
+  does a newer machine where per-process activation fails at runtime
+  (driver quirks) — the first failed Start silently switches to
+  whole-device capture and shows a one-line notice.
 - .NET 8 SDK.
 - `phonon.dll` (Steam Audio native library) placed at
   `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`. Steam

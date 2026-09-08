@@ -379,14 +379,29 @@ public class MainViewModel : INotifyPropertyChanged
         try
         {
             // Per-process loopback (WasapiProcessLoopbackCapture) requires Windows 10
-            // build 19041 (20H1) or later. It has no internal OS-version check of its
-            // own, so on older Windows it would just retry forever and report
-            // AudioCaptureStatus.Error — select the whole-device loopback fallback
-            // (WasapiDeviceLoopbackCapture) here instead, per the plan's Global
-            // Constraints ("whole-device loopback fallback for older Windows").
-            IAudioCaptureService activeCapture = Environment.OSVersion.Version.Build >= 19041
-                ? new WasapiProcessLoopbackCapture()
-                : new WasapiDeviceLoopbackCapture();
+            // build 19041 (20H1) or later. On older Windows go straight to
+            // whole-device loopback (WasapiDeviceLoopbackCapture). On new-enough
+            // Windows, wrap process-loopback in FallbackAudioCaptureService: the
+            // build number only says the API exists, not that it actually
+            // activates on this box (driver quirks, E_NOINTERFACE), and without
+            // this the process-loopback worker would just retry forever and keep
+            // reporting AudioCaptureStatus.Error. The wrapper swaps to
+            // whole-device loopback the first time activation fails before any
+            // successful capture.
+            IAudioCaptureService activeCapture;
+            if (Environment.OSVersion.Version.Build >= 19041)
+            {
+                var fallbackCapture = new FallbackAudioCaptureService(
+                    () => new WasapiProcessLoopbackCapture(),
+                    () => new WasapiDeviceLoopbackCapture());
+                fallbackCapture.Notice += message =>
+                    Application.Current.Dispatcher.Invoke(() => StatusMessage = message);
+                activeCapture = fallbackCapture;
+            }
+            else
+            {
+                activeCapture = new WasapiDeviceLoopbackCapture();
+            }
 
             var output = new WasapiAudioOutput();
             var effectChain = new RadioEffectChain(48000f);
