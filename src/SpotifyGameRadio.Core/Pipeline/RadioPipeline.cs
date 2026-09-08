@@ -37,6 +37,12 @@ public class RadioPipeline : IDisposable
     private readonly float[] _monoBlock;
     private readonly float[] _stereoBlock;
 
+    // Output-stage tunables, copied from the profile by ApplyProfile (same
+    // pattern as the effect-chain parameters). Read once per block on the audio
+    // thread; single-float writes are atomic so a live change is safe.
+    private float _volume = 1f;
+    private float _stereoWidth = 1f;
+
     public int BufferUnderrunCount { get; private set; }
     public event EventHandler<string>? Warning;
 
@@ -88,6 +94,8 @@ public class RadioPipeline : IDisposable
         _tracker.ApplyProfile(profile);
         _primarySpatializer.SetSourcePosition(profile.SourceX, profile.SourceY, profile.SourceZ);
         _fallbackSpatializer.SetSourcePosition(profile.SourceX, profile.SourceY, profile.SourceZ);
+        _volume = Math.Clamp(profile.Volume, 0f, 1f);
+        _stereoWidth = Math.Clamp(profile.StereoWidth, 0f, 4f);
     }
 
     public void Start()
@@ -138,6 +146,13 @@ public class RadioPipeline : IDisposable
                 _effectChain.Process(_monoBlock, _frameSize);
 
                 _activeSpatializer.Process(_monoBlock, _frameSize, _stereoBlock);
+
+                // Post-spatializer output stage: width first, then master gain,
+                // so the volume fader also tames any width-induced level rise.
+                StereoWidth.Apply(_stereoBlock, _frameSize, _stereoWidth);
+                if (_volume != 1f)
+                    for (int s = 0; s < _frameSize * 2; s++)
+                        _stereoBlock[s] *= _volume;
 
                 _output.Write(_stereoBlock, _stereoBlock.Length);
             }

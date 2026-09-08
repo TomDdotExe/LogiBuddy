@@ -57,6 +57,20 @@ public class FakeSpatializer : ISpatializer
     }
 }
 
+public class PanningFakeSpatializer : ISpatializer
+{
+    public void SetSourcePosition(float x, float y, float z) { }
+    public void SetListenerOrientation(float yawDegrees, float pitchDegrees) { }
+    public void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            stereoOutputInterleaved[i * 2] = monoInput[i]; // hard left
+            stereoOutputInterleaved[i * 2 + 1] = 0f;
+        }
+    }
+}
+
 public class RecordingSpatializer : ISpatializer
 {
     public (float x, float y, float z) LastPosition { get; private set; }
@@ -197,6 +211,43 @@ public class RadioPipelineTests
         pipeline.SetOutputDevice("{0.0.0.00000000}.{new-device}");
 
         Assert.Equal("{0.0.0.00000000}.{new-device}", output.LastDeviceId);
+    }
+
+    [Fact]
+    public void Volume_ScalesEveryOutputSample()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+
+        var profile = new RadioProfile { WetDryMix = 0f, Volume = 0.5f };
+        pipeline.ApplyProfile(profile);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.5f, v, precision: 5));
+    }
+
+    [Fact]
+    public void StereoWidthZero_CollapsesPannedOutputToEqualChannels()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { WetDryMix = 0f, StereoWidth = 0f };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        effectChain.ApplyProfile(profile);
+        var spat = new PanningFakeSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spat, spat, effectChain, tracker, frameSize: 2);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        capture.PushSamples(new[] { 1.0f, 1.0f });
+
+        var outBuf = output.WrittenBuffers[0];
+        Assert.Equal(outBuf[0], outBuf[1], precision: 5); // L == R after width 0
+        Assert.Equal(0.5f, outBuf[0], precision: 5);      // mid of (1, 0)
     }
 
     [Fact]
