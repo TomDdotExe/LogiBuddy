@@ -19,17 +19,13 @@
   to the path above, creating the folders if they don't exist. Without
   it, the app still runs but falls back to simple stereo panning
   instead of true HRTF.
-- Set your default Windows output device's sample rate to 48000 Hz
-  (Sound Settings → your device → Device properties → Additional device
-  properties → Advanced). The DSP chain, HRTF spatializer, and output
-  renderer all assume 48kHz; only the `WasapiDeviceLoopbackCapture`
-  fallback (used on pre-20H1 Windows or if per-process capture fails)
-  reports the device's actual negotiated rate. A mismatch there won't
-  crash anything, but it does cause persistent stuttering and audio
-  glitches: the output renderer is hardcoded to 48kHz, so if capture
-  negotiates a different rate (e.g. 44.1kHz) the playback buffer is
-  filled slower than it is drained and repeatedly runs dry. Most modern
-  default devices are already 48kHz.
+- No sample-rate setup is needed. The DSP chain, HRTF spatializer, and
+  output renderer all run at 48kHz; per-process capture always delivers
+  that, and the `WasapiDeviceLoopbackCapture` fallback (used on pre-20H1
+  Windows or when per-process capture fails) reports the device's actual
+  rate, which `ResamplingCaptureService` converts up to 48kHz before it
+  reaches the pipeline. It is a zero-copy passthrough when capture is
+  already 48kHz, so there is no cost on the common path.
 
 ## Running
 

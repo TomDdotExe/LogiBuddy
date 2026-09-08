@@ -388,7 +388,7 @@ public class MainViewModel : INotifyPropertyChanged
             // reporting AudioCaptureStatus.Error. The wrapper swaps to
             // whole-device loopback the first time activation fails before any
             // successful capture.
-            IAudioCaptureService activeCapture;
+            IAudioCaptureService innerCapture;
             if (Environment.OSVersion.Version.Build >= 19041)
             {
                 var fallbackCapture = new FallbackAudioCaptureService(
@@ -396,12 +396,20 @@ public class MainViewModel : INotifyPropertyChanged
                     () => new WasapiDeviceLoopbackCapture());
                 fallbackCapture.Notice += message =>
                     Application.Current.Dispatcher.Invoke(() => StatusMessage = message);
-                activeCapture = fallbackCapture;
+                innerCapture = fallbackCapture;
             }
             else
             {
-                activeCapture = new WasapiDeviceLoopbackCapture();
+                innerCapture = new WasapiDeviceLoopbackCapture();
             }
+
+            // The rest of the pipeline (effect chain, spatializer, output) is
+            // hardcoded to 48 kHz. Per-process loopback always delivers that, but
+            // WasapiDeviceLoopbackCapture reports the device's real rate — a
+            // 44.1 kHz device would otherwise fill the output buffer slower than
+            // it drains and stutter. ResamplingCaptureService converts anything
+            // non-48 kHz up front (and is a no-op passthrough at 48 kHz).
+            IAudioCaptureService activeCapture = new ResamplingCaptureService(innerCapture);
 
             var output = new WasapiAudioOutput();
             var effectChain = new RadioEffectChain(48000f);
