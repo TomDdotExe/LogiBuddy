@@ -1,0 +1,7 @@
+<UserControl x:Class="SpotifyGameRadio.App.Controls.HotkeyCaptureControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Button x:Name="CaptureButton" Width="160" Click="OnCaptureClick"
+            PreviewKeyDown="OnPreviewKeyDown" PreviewMouseDown="OnPreviewMouseDown"
+            LostKeyboardFocus="OnLostKeyboardFocus" />
+</UserControl>

@@ -37,7 +37,9 @@ public class ConfigStoreTests
                 MouseSensitivity = 0.2f,
                 MaxYawDegrees = 80f,
                 MaxPitchDegrees = 50f,
-                SpringBackRatePerSecond = 500f
+                SpringBackRatePerSecond = 500f,
+                AutoRouteSource = false,
+                RouteSourceToDeviceId = "device-cable-1",
             };
 
             store.Save(profile);
@@ -48,6 +50,8 @@ public class ConfigStoreTests
             Assert.Equal(profile.HighPassHz, loaded.HighPassHz);
             Assert.Equal(profile.Hotkey.VirtualKeyCode, loaded.Hotkey.VirtualKeyCode);
             Assert.Equal(profile.SpringBackRatePerSecond, loaded.SpringBackRatePerSecond);
+            Assert.False(loaded.AutoRouteSource);
+            Assert.Equal("device-cable-1", loaded.RouteSourceToDeviceId);
         }
         finally
         {
@@ -86,6 +90,31 @@ public class ConfigStoreTests
             store.Delete("Temp");
 
             Assert.DoesNotContain("Temp", store.ListProfiles());
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ProfileJsonMissingNewerFields_KeepsDefaults()
+    {
+        var store = CreateStore(out var dir);
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dir, "Legacy.json"),
+                "{ \"Name\": \"Legacy\", \"HighPassHz\": 600 }");
+
+            var loaded = store.Load("Legacy");
+
+            Assert.Equal("Legacy", loaded.Name);
+            Assert.Equal(600f, loaded.HighPassHz);
+            Assert.Equal(1.0f, loaded.WetDryMix);           // default retained
+            Assert.Equal(0x12, loaded.Hotkey.VirtualKeyCode); // default retained
+            Assert.True(loaded.AutoRouteSource);            // default retained
+            Assert.Equal("", loaded.RouteSourceToDeviceId); // default retained
         }
         finally
         {

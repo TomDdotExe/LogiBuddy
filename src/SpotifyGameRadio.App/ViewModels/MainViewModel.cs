@@ -15,14 +15,36 @@ namespace SpotifyGameRadio.App.ViewModels;
 public class MainViewModel : INotifyPropertyChanged
 {
     private readonly IConfigStore _configStore = new ConfigStore();
+    private readonly ISourceAudioRouter _router = new WindowsAppAudioRouter();
+    private readonly RouteRecoveryStore _routeRecovery = new();
+    private RouteRecoveryRecord? _activeRouteRecovery;
     private RadioPipeline? _pipeline;
     private Win32MouseHook? _mouseHook;
     private System.Timers.Timer? _underrunTimer;
     private TestTonePlayer? _testTone;
 
+    private static readonly HashSet<string> LiveProfileProperties = new()
+    {
+        nameof(RadioProfile.HighPassHz), nameof(RadioProfile.LowPassHz),
+        nameof(RadioProfile.DistortionDrive), nameof(RadioProfile.CompressorThresholdDb),
+        nameof(RadioProfile.CompressorRatio), nameof(RadioProfile.NoiseLevel),
+        nameof(RadioProfile.WetDryMix),
+        nameof(RadioProfile.SourceX), nameof(RadioProfile.SourceY), nameof(RadioProfile.SourceZ),
+        nameof(RadioProfile.MouseSensitivity), nameof(RadioProfile.MaxYawDegrees),
+        nameof(RadioProfile.MaxPitchDegrees), nameof(RadioProfile.SpringBackRatePerSecond),
+    };
+
+    private static readonly HashSet<string> RestartRequiredProfileProperties = new()
+    {
+        nameof(RadioProfile.SourceProcessName), nameof(RadioProfile.OutputDeviceId),
+        nameof(RadioProfile.Hotkey),
+        nameof(RadioProfile.AutoRouteSource), nameof(RadioProfile.RouteSourceToDeviceId),
+    };
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public IReadOnlyList<AudioSourceInfo> AvailableSources { get; private set; } = Array.Empty<AudioSourceInfo>();
+    public IReadOnlyList<RenderDeviceInfo> AvailableRenderDevices { get; private set; } = Array.Empty<RenderDeviceInfo>();
     public IReadOnlyList<string> AvailableProfiles => _configStore.ListProfiles();
 
     private string _statusMessage = "Idle";
@@ -37,6 +59,13 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _bufferUnderrunCount;
         set { _bufferUnderrunCount = value; OnPropertyChanged(); }
+    }
+
+    private bool _restartRequired;
+    public bool RestartRequired
+    {
+        get => _restartRequired;
+        set { _restartRequired = value; OnPropertyChanged(); }
     }
 
     private bool _testToneEnabled;
@@ -66,11 +95,17 @@ public class MainViewModel : INotifyPropertyChanged
 
     public RadioProfile Profile { get; private set; } = new();
 
+    /// Whether per-app audio routing is available at all (Windows 11 + a
+    /// reachable IAudioPolicyConfig factory). Fixed for the app's lifetime, so
+    /// no change notification is needed; the routing UI row binds IsEnabled to it.
+    public bool IsRoutingSupported => _router.IsSupported;
+
     public ICommand RefreshSourcesCommand { get; }
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
     public ICommand SaveProfileCommand { get; }
     public ICommand LoadProfileCommand { get; }
+    public ICommand ResetSourceRoutingCommand { get; }
 
     public MainViewModel()
     {
@@ -84,20 +119,241 @@ public class MainViewModel : INotifyPropertyChanged
         StopCommand = new RelayCommand(_ => Stop());
         SaveProfileCommand = new RelayCommand(_ => _configStore.Save(Profile));
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
+        ResetSourceRoutingCommand = new RelayCommand(_ => ResetSourceRouting());
 
         RefreshSources();
+        Profile.PropertyChanged += OnProfilePropertyChanged;
+
+        // A profile saved on a Windows 11 box would otherwise make every Start
+        // fail on a machine where routing isn't available at all.
+        if (!_router.IsSupported && Profile.AutoRouteSource) Profile.AutoRouteSource = false;
+
+        // Crash recovery runs during construction, i.e. while the window is
+        // being built — nothing in here may throw, or the app fails to launch.
+        try
+        {
+            if (_routeRecovery.Exists())
+            {
+                RestoreSourceRouting();
+                StatusMessage = "Restored source audio routing from a previous session.";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Couldn't restore previous source routing: {ex.Message}";
+        }
+    }
+
+    private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is null) return;
+
+        if (LiveProfileProperties.Contains(e.PropertyName))
+        {
+            if (_pipeline is null) return;
+            try
+            {
+                _pipeline.ApplyProfile(Profile);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Couldn't apply change: {ex.Message}";
+            }
+        }
+        else if (RestartRequiredProfileProperties.Contains(e.PropertyName) && _pipeline is not null)
+        {
+            RestartRequired = true;
+        }
     }
 
     private void RefreshSources()
     {
         AvailableSources = AudioSessionEnumerator.ListActiveSources();
         OnPropertyChanged(nameof(AvailableSources));
+
+        // The synthetic empty-id entry is how the user gets back to auto-detect
+        // after picking a device: it sets RouteSourceToDeviceId = "", which
+        // ResolveRouteDeviceId() treats as "find a virtual cable at Start".
+        AvailableRenderDevices = new[] { new RenderDeviceInfo("", "(auto-detect virtual cable)") }
+            .Concat(RenderDeviceEnumerator.ListRenderDevices())
+            .ToList();
+        OnPropertyChanged(nameof(AvailableRenderDevices));
     }
 
     private void LoadProfile(string name)
     {
+        Profile.PropertyChanged -= OnProfilePropertyChanged;
         Profile = _configStore.Load(name);
+        Profile.PropertyChanged += OnProfilePropertyChanged;
         OnPropertyChanged(nameof(Profile));
+
+        if (_pipeline is not null)
+        {
+            try { _pipeline.ApplyProfile(Profile); }
+            catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
+            RestartRequired = true;
+        }
+    }
+
+    /// Resolves the render-device id to route the source to: the profile's
+    /// explicit choice if it still exists, else the first auto-detected virtual
+    /// cable, else null.
+    private string? ResolveRouteDeviceId()
+    {
+        var devices = RenderDeviceEnumerator.ListRenderDevices();
+        if (!string.IsNullOrEmpty(Profile.RouteSourceToDeviceId) &&
+            devices.Any(d => d.Id == Profile.RouteSourceToDeviceId))
+            return Profile.RouteSourceToDeviceId;
+
+        return devices.FirstOrDefault(d => RenderDeviceEnumerator.LooksLikeVirtualCable(d.FriendlyName))?.Id;
+    }
+
+    /// Applies routing for every pid of the source process. Returns null on
+    /// success or a user-facing error string on failure (with any partial
+    /// routing already rolled back).
+    private string? TryRouteSource()
+    {
+        if (!_router.IsSupported)
+            return "Auto-routing needs Windows 11 — turn it off in settings to continue.";
+
+        var entries = new List<RouteRecoveryEntry>();
+        var routed = new List<int>();
+        try
+        {
+            string? deviceId = ResolveRouteDeviceId();
+            if (deviceId is null)
+                return "No route-target device — pick one or turn off auto-routing.";
+
+            var pids = System.Diagnostics.Process
+                .GetProcessesByName(Profile.SourceProcessName)
+                .Select(p => p.Id)
+                .ToList();
+            if (pids.Count == 0)
+                return "Start the source app first, then Start.";
+
+            foreach (int pid in pids)
+            {
+                var r = _router.GetCurrentRoute(pid);
+                entries.Add(new RouteRecoveryEntry(pid, r.Console, r.Multimedia, r.Communications));
+            }
+
+            var record = new RouteRecoveryRecord(Profile.SourceProcessName, entries);
+            _routeRecovery.Write(record); // persist BEFORE changing anything
+
+            foreach (int pid in pids)
+            {
+                try
+                {
+                    _router.RouteProcess(pid, deviceId);
+                    routed.Add(pid);
+                }
+                catch (SourceRoutingException ex) when (ex.NoActiveAudio)
+                {
+                    // This pid has no audio session. Normal for a multi-process
+                    // app like Spotify, where only one of several pids owns the
+                    // session — skip it and keep going.
+                }
+                catch (SourceRoutingException ex)
+                {
+                    RollBackRouting(routed, entries);
+                    return $"Couldn't route source audio: {ex.Message} Fix the route device or turn off auto-routing.";
+                }
+            }
+
+            if (routed.Count == 0)
+            {
+                RollBackRouting(routed, entries);
+                return "The source isn't playing any audio yet — start playback in it, then click Start.";
+            }
+
+            // The record lists every pid's prior route, including the skipped
+            // session-less ones — restoring those is a harmless no-op.
+            _activeRouteRecovery = record;
+            return null;
+        }
+        catch (Exception ex)
+        {
+            // Backstop: routing runs on the WPF UI thread from the Start
+            // command, so no failure here (COM, IO, a process exiting
+            // mid-enumeration) may escape as an unhandled exception.
+            RollBackRouting(routed, entries);
+            return $"Couldn't set up source routing: {ex.Message}";
+        }
+    }
+
+    /// Puts back the prior route for every pid already routed, drops the
+    /// recovery file, and clears the active record. Best-effort throughout: it
+    /// runs on failure paths that must still return a message, not throw.
+    private void RollBackRouting(List<int> routed, List<RouteRecoveryEntry> entries)
+    {
+        foreach (int pid in routed)
+        {
+            var prev = entries.FirstOrDefault(e => e.ProcessId == pid);
+            if (prev is null) continue;
+            try { _router.RestoreProcess(pid, new AppAudioRoute(prev.Console, prev.Multimedia, prev.Communications)); }
+            catch (Exception) { /* best effort */ }
+        }
+        _routeRecovery.Delete();
+        _activeRouteRecovery = null;
+    }
+
+    private void RestoreSourceRouting()
+    {
+        var record = _activeRouteRecovery ?? _routeRecovery.Read();
+        if (record is not null)
+        {
+            foreach (var e in record.Routes)
+            {
+                try { _router.RestoreProcess(e.ProcessId, new AppAudioRoute(e.Console, e.Multimedia, e.Communications)); }
+                catch (Exception) { /* best effort */ }
+            }
+
+            // Pids that appeared after the record was written (the source app
+            // was killed and relaunched mid-session, or spawned another helper)
+            // would otherwise stay pointed at the cable. They had no override of
+            // ours to begin with, so clearing is the correct restore for them.
+            if (_router.IsSupported)
+            {
+                var known = record.Routes.Select(r => r.ProcessId).ToHashSet();
+                try
+                {
+                    foreach (var p in System.Diagnostics.Process.GetProcessesByName(record.SourceProcessName))
+                    {
+                        if (known.Contains(p.Id)) continue;
+                        try { _router.RestoreProcess(p.Id, AppAudioRoute.None); }
+                        catch (Exception) { /* best effort */ }
+                    }
+                }
+                catch (Exception) { /* best effort */ }
+            }
+        }
+        _routeRecovery.Delete();
+        _activeRouteRecovery = null;
+    }
+
+    private void ResetSourceRouting()
+    {
+        try
+        {
+            var record = _activeRouteRecovery ?? _routeRecovery.Read();
+            if (record is not null)
+            {
+                RestoreSourceRouting();
+            }
+            else if (_router.IsSupported)
+            {
+                foreach (var p in System.Diagnostics.Process.GetProcessesByName(Profile.SourceProcessName))
+                {
+                    try { _router.RestoreProcess(p.Id, AppAudioRoute.None); }
+                    catch (Exception) { /* best effort */ }
+                }
+            }
+            StatusMessage = "Source routing reset.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Couldn't reset source routing: {ex.Message}";
+        }
     }
 
     private void Start()
@@ -108,6 +364,16 @@ public class MainViewModel : INotifyPropertyChanged
         // thing so a failure degrades to a status message instead of
         // crashing the app on the UI thread — see plan's Global Constraints
         // on graceful degradation, including output device loss.
+        if (Profile.AutoRouteSource)
+        {
+            string? routeError = TryRouteSource();
+            if (routeError is not null)
+            {
+                StatusMessage = routeError;
+                return;
+            }
+        }
+
         Win32MouseHook? mouseHook = null;
         RadioPipeline? pipeline = null;
         try
@@ -183,6 +449,7 @@ public class MainViewModel : INotifyPropertyChanged
                 if (_pipeline is not null) BufferUnderrunCount = _pipeline.BufferUnderrunCount;
             });
             _underrunTimer.Start();
+            RestartRequired = false;
         }
         catch (Exception ex)
         {
@@ -191,11 +458,15 @@ public class MainViewModel : INotifyPropertyChanged
             mouseHook?.Dispose();
             _pipeline = null;
             _mouseHook = null;
+            if (_activeRouteRecovery is not null) RestoreSourceRouting();
             StatusMessage = $"Failed to start: {ex.Message}";
         }
     }
 
-    private void Stop()
+    /// Also called from MainWindow.OnClosed, so closing the window restores the
+    /// source's routing instead of leaving it pointed at the silent cable.
+    /// Safe when nothing is running — every member touched is null-guarded.
+    public void Stop()
     {
         _pipeline?.Stop();
         // Dispose after Stop: releases the spatializers' native resources
@@ -210,7 +481,9 @@ public class MainViewModel : INotifyPropertyChanged
         // Start() builds a new stack rather than stacking on a live one.
         _pipeline = null;
         _mouseHook = null;
+        RestoreSourceRouting();
         StatusMessage = "Stopped";
+        RestartRequired = false;
     }
 
     /// Called from MainWindow.OnClosed so the test tone never outlives the window.

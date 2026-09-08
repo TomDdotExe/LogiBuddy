@@ -43,25 +43,50 @@
    Mouse Sensitivity / Max Yaw / Max Pitch to roughly match your
    in-game sensitivity and freelook angle limits — this is an
    approximation, not a memory read, so expect to tune it by ear.
-   These four settings have no UI controls yet; see Known Limitations
-   below for how to edit them.
 5. Click Start, then hold your freelook key and look around in-game —
    the radio audio should shift as if it were mounted in the vehicle.
 6. Click Save Profile to keep these settings for next time.
 
 ## Known Limitations
 
-- Most tunable settings have no UI controls yet: output device
-  selection, the freelook hotkey, mouse sensitivity, max yaw/pitch, and
+- A few settings still have no UI controls: output device selection and
   the profile name (so, profile switching too). To change them, click
   Save Profile once to create the file, then edit
   `%APPDATA%\SpotifyGameRadio\Profiles\<name>.json` directly and
   restart the app.
-- Moving a DSP slider while the radio is running has no live effect.
-  Click Stop, then Start again, to apply the change.
 - Vertical look (pitch) has no audible effect on the spatialized audio
   — only left/right (yaw) does.
 - On pre-Windows-10-20H1 systems, which use the whole-device capture
   fallback, choosing an audio source on the same device you're playing
   back to can create a feedback loop. Use headphones and/or route the
   source to a different device if you hit this.
+
+## Real-time editing
+
+While the pipeline is running, these apply instantly (no Stop/Start):
+DSP sliders (high/low-pass, distortion, compressor, static, wet/dry),
+the source-position marker, and the freelook tuning sliders (mouse
+sensitivity, max yaw/pitch, spring-back).
+
+These need a Stop then Start — the window shows an orange "restart to
+apply" hint when you change one while running: Source process, Output
+device, the freelook hotkey, and the auto-routing settings.
+
+## Source audio routing
+
+To stop hearing the raw source (e.g. Spotify) alongside the processed
+radio, the app routes the source app's output to a silent render
+endpoint while running.
+
+- Requires Windows 11 and a virtual audio device (VB-Audio Virtual
+  Cable, VoiceMeeter, etc.). On Windows 10 the option is unavailable
+  and Start is blocked while "Auto-route" is ticked — untick it and
+  route the source manually in Windows Sound settings instead.
+- Leave the device dropdown on "(auto-detect virtual cable)" to have one
+  found at Start, or pick a device explicitly. The choice is saved when
+  you click Save Profile.
+- On Stop, the source's previous output device is restored. If the app
+  is killed while running, the next launch restores it and shows
+  "Restored source audio routing from a previous session."
+- "Reset routing" forces the restore if anything is left pointing at
+  the cable.

@@ -24,6 +24,11 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        // Stop() first: it restores the source app's audio routing and tears
+        // down the pipeline/hook/timers. Closing the window without it would
+        // leave the source pointed at the silent cable until the next launch's
+        // crash recovery.
+        (DataContext as MainViewModel)?.Stop();
         (DataContext as MainViewModel)?.Cleanup();
         base.OnClosed(e);
     }
