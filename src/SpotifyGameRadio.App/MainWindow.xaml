@@ -24,13 +24,17 @@
             <RowDefinition Height="Auto" /> <!-- 9 volume -->
             <RowDefinition Height="Auto" /> <!-- 10 stereo width -->
             <RowDefinition Height="Auto" /> <!-- 11 freelook hotkey -->
-            <RowDefinition Height="Auto" /> <!-- 12 mouse sensitivity -->
-            <RowDefinition Height="Auto" /> <!-- 13 max yaw -->
-            <RowDefinition Height="Auto" /> <!-- 14 max pitch -->
-            <RowDefinition Height="Auto" /> <!-- 15 spring-back -->
-            <RowDefinition Height="Auto" /> <!-- 16 buttons + restart hint -->
-            <RowDefinition Height="Auto" /> <!-- 17 canvas + height -->
-            <RowDefinition Height="*" />    <!-- 18 status -->
+            <RowDefinition Height="Auto" /> <!-- 12 recenter hotkey -->
+            <RowDefinition Height="Auto" /> <!-- 13 vehicle toggle hotkey -->
+            <RowDefinition Height="Auto" /> <!-- 14 vehicle exit delay -->
+            <RowDefinition Height="Auto" /> <!-- 15 auto-mute source -->
+            <RowDefinition Height="Auto" /> <!-- 16 mouse sensitivity -->
+            <RowDefinition Height="Auto" /> <!-- 17 max yaw -->
+            <RowDefinition Height="Auto" /> <!-- 18 max pitch -->
+            <RowDefinition Height="Auto" /> <!-- 19 spring-back -->
+            <RowDefinition Height="Auto" /> <!-- 20 buttons + restart hint -->
+            <RowDefinition Height="Auto" /> <!-- 21 canvas + height -->
+            <RowDefinition Height="*" />    <!-- 22 status -->
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -116,26 +120,50 @@
         </StackPanel>
 
         <StackPanel Grid.Row="12" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Recenter hotkey:" VerticalAlignment="Center" Width="140" />
+            <controls:HotkeyCaptureControl Hotkey="{Binding Profile.RecenterHotkey, Mode=TwoWay}" />
+            <TextBlock Text=" fires Recenter without alt-tabbing" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="Gray" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="13" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Vehicle toggle hotkey:" VerticalAlignment="Center" Width="140" />
+            <controls:HotkeyCaptureControl Hotkey="{Binding Profile.VehicleToggleHotkey, Mode=TwoWay}" />
+            <TextBlock Text=" simulates getting in/out of a vehicle" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="Gray" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="14" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Vehicle exit delay (s):" VerticalAlignment="Center" Width="140" />
+            <Slider Minimum="0" Maximum="15" Width="200" Value="{Binding Profile.VehicleExitDelaySeconds}"
+                    ToolTip="Delay before the radio mutes after toggling 'out of vehicle', for games with an exit animation (e.g. Squad)." />
+        </StackPanel>
+
+        <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,0,0,8">
+            <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
+                      VerticalAlignment="Center"
+                      ToolTip="Mutes the source app's own Windows audio session while the radio is running, so you don't have to mute it manually in the mixer." />
+        </StackPanel>
+
+        <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Mouse sensitivity:" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0.01" Maximum="1.0" Width="200" Value="{Binding Profile.MouseSensitivity}" />
         </StackPanel>
 
-        <StackPanel Grid.Row="13" Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel Grid.Row="17" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Max yaw (°):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="180" Width="200" Value="{Binding Profile.MaxYawDegrees}" />
         </StackPanel>
 
-        <StackPanel Grid.Row="14" Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel Grid.Row="18" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Max pitch (°):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="90" Width="200" Value="{Binding Profile.MaxPitchDegrees}" />
         </StackPanel>
 
-        <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel Grid.Row="19" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Spring-back (°/s):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="2000" Width="200" Value="{Binding Profile.SpringBackRatePerSecond}" />
         </StackPanel>
 
-        <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel Grid.Row="20" Orientation="Horizontal" Margin="0,0,0,8">
             <Button Content="Start" Command="{Binding StartCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Stop" Command="{Binding StopCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="100" />
@@ -144,7 +172,7 @@
                        Text="Restart (Stop then Start) to apply source / routing changes." />
         </StackPanel>
 
-        <StackPanel Grid.Row="17" Orientation="Horizontal" HorizontalAlignment="Left">
+        <StackPanel Grid.Row="21" Orientation="Horizontal" HorizontalAlignment="Left">
             <controls:SourcePositionCanvas
                 SourceX="{Binding Profile.SourceX}"
                 SourceZ="{Binding Profile.SourceZ}"
@@ -156,7 +184,7 @@
                     ToolTip="Raises or lowers the source. Audible on the HRTF path; the stereo-pan fallback has no elevation cue." />
         </StackPanel>
 
-        <StackPanel Grid.Row="18" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">
+        <StackPanel Grid.Row="22" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">
             <TextBlock Text="{Binding StatusMessage}" FontWeight="Bold" TextWrapping="Wrap" MaxWidth="400" />
             <TextBlock Text="{Binding BufferUnderrunCount, StringFormat=' (underruns: {0})'}" Margin="8,0,0,0" />
         </StackPanel>
