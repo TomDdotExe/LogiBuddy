@@ -42,9 +42,15 @@
    Mouse Sensitivity / Max Yaw / Max Pitch to roughly match your
    in-game sensitivity and freelook angle limits — this is an
    approximation, not a memory read, so expect to tune it by ear.
-5. Click Start, then hold your freelook key and look around in-game —
+5. Optionally set a Recenter hotkey and a Vehicle toggle hotkey (both unbound
+   by default) in the window — Recenter snaps the listener back to forward
+   without alt-tabbing out of the game; the vehicle toggle simulates getting
+   in/out of a vehicle, muting the radio (not the source) after a
+   configurable delay so it matches games with an exit-vehicle animation
+   (e.g. Squad). Both work while the game has keyboard focus.
+6. Click Start, then hold your freelook key and look around in-game —
    the radio audio should shift as if it were mounted in the vehicle.
-6. Click Save Profile to keep these settings for next time.
+7. Click Save Profile to keep these settings for next time.
 
 ## Known Limitations
 
@@ -69,7 +75,8 @@ sensitivity, max yaw/pitch, spring-back).
 
 These need a Stop then Start — the window shows an orange "restart to
 apply" hint when you change one while running: Source process, Output
-device, the freelook hotkey, and the auto-routing settings.
+device, the freelook hotkey, the auto-routing settings, and the
+source-mute setting.
 
 ## Source audio routing
 
@@ -89,3 +96,16 @@ endpoint while running.
   "Restored source audio routing from a previous session."
 - "Reset routing" forces the restore if anything is left pointing at
   the cable.
+
+## Source audio muting
+
+"Auto-mute source audio on Start" is a second, independent way to avoid
+hearing the raw source — but unlike routing, it is **off by default** and
+should stay off unless you understand the tradeoff: it mutes the source
+app's own Windows audio session, and since this app captures that same
+session's audio to build the radio, muting it also silences the radio
+itself. It is only useful if you are not relying on this app's capture of
+that source (an edge case), and it is automatically skipped whenever
+"Auto-route source to a silent device" is enabled, since routing already
+solves the same problem without this conflict. Prefer routing (or the
+pre-existing manual mixer-mute) for the common case.

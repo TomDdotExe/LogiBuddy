@@ -23,6 +23,7 @@ public class MainViewModel : INotifyPropertyChanged
     private System.Windows.Threading.DispatcherTimer? _uiTimer;
     private TestTonePlayer? _testTone;
     private readonly ISourceSessionMuter _sessionMuter = new NAudioSourceSessionMuter();
+    private string? _mutedProcessName;
     private TapHotkeyWatcher? _recenterHotkeyWatcher;
     private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
     private bool _isInVehicle = true;
@@ -147,13 +148,7 @@ public class MainViewModel : INotifyPropertyChanged
         SaveProfileCommand = new RelayCommand(_ => _configStore.Save(Profile));
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
         ResetSourceRoutingCommand = new RelayCommand(_ => ResetSourceRouting());
-        RecenterCommand = new RelayCommand(_ =>
-        {
-            _pipeline?.RecenterListener();
-            // Snap the marker now rather than waiting for the next ~30 Hz tick.
-            ListenerYaw = 0;
-            ListenerPitch = 0;
-        });
+        RecenterCommand = new RelayCommand(_ => Recenter());
 
         RefreshSources();
         Profile.PropertyChanged += OnProfilePropertyChanged;
@@ -437,9 +432,12 @@ public class MainViewModel : INotifyPropertyChanged
         else
         {
             StatusMessage = $"Exiting vehicle — muting in {Profile.VehicleExitDelaySeconds:0.#}s";
+            float delaySeconds = Profile.VehicleExitDelaySeconds;
+            if (float.IsNaN(delaySeconds) || float.IsInfinity(delaySeconds)) delaySeconds = 0f;
+            delaySeconds = Math.Clamp(delaySeconds, 0f, 60f);
             var timer = new System.Windows.Threading.DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(Math.Max(0, Profile.VehicleExitDelaySeconds))
+                Interval = TimeSpan.FromSeconds(delaySeconds)
             };
             timer.Tick += (_, _) =>
             {
@@ -450,6 +448,17 @@ public class MainViewModel : INotifyPropertyChanged
             _vehicleExitTimer = timer;
             timer.Start();
         }
+    }
+
+    /// Snaps the freelook listener orientation back to forward, both in the
+    /// pipeline and the UI marker. Shared by RecenterCommand (the window
+    /// button) and the Recenter hotkey.
+    private void Recenter()
+    {
+        _pipeline?.RecenterListener();
+        // Snap the marker now rather than waiting for the next ~30 Hz tick.
+        ListenerYaw = 0;
+        ListenerPitch = 0;
     }
 
     private void Start()
@@ -513,15 +522,30 @@ public class MainViewModel : INotifyPropertyChanged
             var effectChain = new RadioEffectChain(48000f);
             mouseHook = new Win32MouseHook(Profile.Hotkey);
             recenterHotkeyWatcher = new TapHotkeyWatcher(Profile.RecenterHotkey, new Win32KeyStateSource());
-            recenterHotkeyWatcher.Pressed += () => Application.Current.Dispatcher.Invoke(() =>
+            recenterHotkeyWatcher.Pressed += () =>
             {
-                _pipeline?.RecenterListener();
-                ListenerYaw = 0;
-                ListenerPitch = 0;
-            });
+                // A Pressed event can still be in flight after Stop()/window-close
+                // has begun tearing down the dispatcher (TapHotkeyWatcher.Dispose()
+                // doesn't join its poll thread). Invoke can throw during shutdown or
+                // if Application.Current is already null — this runs on a background
+                // thread with no global unhandled-exception handler, so an uncaught
+                // throw here would crash the whole process.
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(Recenter);
+                }
+                catch (Exception) { /* app is shutting down; nothing to recenter */ }
+            };
 
             vehicleToggleHotkeyWatcher = new TapHotkeyWatcher(Profile.VehicleToggleHotkey, new Win32KeyStateSource());
-            vehicleToggleHotkeyWatcher.Pressed += () => Application.Current.Dispatcher.Invoke(OnVehicleTogglePressed);
+            vehicleToggleHotkeyWatcher.Pressed += () =>
+            {
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(OnVehicleTogglePressed);
+                }
+                catch (Exception) { /* app is shutting down; nothing to toggle */ }
+            };
             var tracker = new FreelookTracker(mouseHook, Profile);
 
             ISpatializer fallback = new StereoPanSpatializer();
@@ -543,7 +567,19 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = "Running";
 
             _isInVehicle = true;
-            if (Profile.AutoMuteSource) _sessionMuter.Mute(Profile.SourceProcessName);
+            _vehicleExitTimer?.Stop();
+            _vehicleExitTimer = null;
+            // Skip auto-mute entirely when routing is also active: routing already
+            // hides the raw source (by moving its output to a silent device) without
+            // touching Mute, so it doesn't collide with this app's own loopback
+            // capture the way session-mute does. Running both would also make the
+            // mute scan the wrong render endpoint once routing has moved the
+            // session's stream off the default device.
+            if (Profile.AutoMuteSource && !Profile.AutoRouteSource)
+            {
+                _sessionMuter.Mute(Profile.SourceProcessName);
+                _mutedProcessName = Profile.SourceProcessName;
+            }
 
             pipeline.Start();
 
@@ -603,7 +639,11 @@ public class MainViewModel : INotifyPropertyChanged
             _mouseHook = null;
             _recenterHotkeyWatcher = null;
             _vehicleToggleHotkeyWatcher = null;
-            _sessionMuter.Unmute(Profile.SourceProcessName);
+            if (_mutedProcessName is not null)
+            {
+                _sessionMuter.Unmute(_mutedProcessName);
+                _mutedProcessName = null;
+            }
             if (_activeRouteRecovery is not null) RestoreSourceRouting();
             StatusMessage = $"Failed to start: {ex.Message}";
         }
@@ -628,7 +668,11 @@ public class MainViewModel : INotifyPropertyChanged
         _vehicleToggleHotkeyWatcher?.Dispose();
         _recenterHotkeyWatcher = null;
         _vehicleToggleHotkeyWatcher = null;
-        _sessionMuter.Unmute(Profile.SourceProcessName);
+        if (_mutedProcessName is not null)
+        {
+            _sessionMuter.Unmute(_mutedProcessName);
+            _mutedProcessName = null;
+        }
         // Cleared so StartCommand.CanExecute goes true again and a fresh
         // Start() builds a new stack rather than stacking on a live one.
         _pipeline = null;

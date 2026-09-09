@@ -140,7 +140,7 @@
         <StackPanel Grid.Row="15" Orientation="Horizontal" Margin="0,0,0,8">
             <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
                       VerticalAlignment="Center"
-                      ToolTip="Mutes the source app's own Windows audio session while the radio is running, so you don't have to mute it manually in the mixer." />
+                      ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />
         </StackPanel>
 
         <StackPanel Grid.Row="16" Orientation="Horizontal" Margin="0,0,0,8">
@@ -169,7 +169,7 @@
             <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="100" />
             <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Foreground="DarkOrange"
                        Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}"
-                       Text="Restart (Stop then Start) to apply source / routing changes." />
+                       Text="Restart (Stop then Start) to apply source / routing / mute changes." />
         </StackPanel>
 
         <StackPanel Grid.Row="21" Orientation="Horizontal" HorizontalAlignment="Left">

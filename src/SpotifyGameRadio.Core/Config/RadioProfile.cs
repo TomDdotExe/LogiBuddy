@@ -31,7 +31,7 @@ public class RadioProfile : INotifyPropertyChanged
     private FreelookHotkey _recenterHotkey = new() { VirtualKeyCode = 0 };
     private FreelookHotkey _vehicleToggleHotkey = new() { VirtualKeyCode = 0 };
     private float _vehicleExitDelaySeconds = 3.0f;
-    private bool _autoMuteSource = true;
+    private bool _autoMuteSource = false;
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -93,6 +93,14 @@ public class RadioProfile : INotifyPropertyChanged
     /// When true, MainViewModel mutes the source process's own Windows audio
     /// session on Start and unmutes it on Stop, so the raw source is never
     /// audible alongside the processed radio without a manual mixer step.
+    /// Defaults to false: muting the source's session ALSO silences that
+    /// session's contribution to this app's own loopback capture (confirmed on
+    /// both WasapiDeviceLoopbackCapture and WasapiProcessLoopbackCapture) — so
+    /// turning this on silences the whole radio, not just the raw source. Only
+    /// safe to enable if you don't need this app to actually process that
+    /// source's audio, which defeats the app's purpose for its own source. Kept
+    /// as an opt-in rather than removed because a future release may route the
+    /// mute through a mechanism that doesn't intersect the capture path.
     public bool AutoMuteSource { get => _autoMuteSource; set => SetField(ref _autoMuteSource, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
