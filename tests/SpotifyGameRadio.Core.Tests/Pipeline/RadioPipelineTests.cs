@@ -251,6 +251,39 @@ public class RadioPipelineTests
     }
 
     [Fact]
+    public void SetVehicleMuted_True_SilencesOutputRegardlessOfVolume()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+
+        pipeline.SetVehicleMuted(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetVehicleMuted_ComposesWithVolume_NotReplacesIt()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        var profile = new RadioProfile { WetDryMix = 0f, Volume = 0.5f };
+        pipeline.ApplyProfile(profile);
+
+        pipeline.SetVehicleMuted(true);
+        pipeline.SetVehicleMuted(false); // back "in vehicle"
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        // Volume (0.5) must still apply after a mute/unmute cycle — vehicle
+        // gain must multiply with _volume, not overwrite it.
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.5f, v, precision: 5));
+    }
+
+    [Fact]
     public void ListenerYawAndPitch_ReflectTheTrackerAfterFreelookInput()
     {
         var capture = new FakeCaptureService();

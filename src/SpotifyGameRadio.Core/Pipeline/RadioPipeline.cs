@@ -42,6 +42,7 @@ public class RadioPipeline : IDisposable
     // thread; single-float writes are atomic so a live change is safe.
     private float _volume = 1f;
     private float _stereoWidth = 1f;
+    private float _vehicleGain = 1f; // not part of RadioProfile; runtime-only, toggled by the vehicle in/out feature.
 
     public int BufferUnderrunCount { get; private set; }
     public event EventHandler<string>? Warning;
@@ -54,6 +55,11 @@ public class RadioPipeline : IDisposable
 
     /// Snaps the freelook listener orientation back to forward. Safe on the UI thread.
     public void RecenterListener() => _tracker.Recenter();
+
+    /// Mutes/unmutes the processed output independent of Profile.Volume — used
+    /// by the vehicle in/out toggle. Never persisted; a new RadioPipeline
+    /// instance always starts unmuted (1f). Safe to call from the UI thread.
+    public void SetVehicleMuted(bool muted) => _vehicleGain = muted ? 0f : 1f;
 
     public RadioPipeline(
         IAudioCaptureService capture,
@@ -153,9 +159,10 @@ public class RadioPipeline : IDisposable
                 // Post-spatializer output stage: width first, then master gain,
                 // so the volume fader also tames any width-induced level rise.
                 StereoWidth.Apply(_stereoBlock, _frameSize, _stereoWidth);
-                if (_volume != 1f)
+                float gain = _volume * _vehicleGain;
+                if (gain != 1f)
                     for (int s = 0; s < _frameSize * 2; s++)
-                        _stereoBlock[s] *= _volume;
+                        _stereoBlock[s] *= gain;
 
                 _output.Write(_stereoBlock, _stereoBlock.Length);
             }
