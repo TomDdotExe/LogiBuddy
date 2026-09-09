@@ -22,6 +22,11 @@ public class MainViewModel : INotifyPropertyChanged
     private Win32MouseHook? _mouseHook;
     private System.Windows.Threading.DispatcherTimer? _uiTimer;
     private TestTonePlayer? _testTone;
+    private readonly ISourceSessionMuter _sessionMuter = new NAudioSourceSessionMuter();
+    private TapHotkeyWatcher? _recenterHotkeyWatcher;
+    private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
+    private bool _isInVehicle = true;
+    private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
     {
@@ -43,6 +48,7 @@ public class MainViewModel : INotifyPropertyChanged
     {
         nameof(RadioProfile.SourceProcessName),
         nameof(RadioProfile.AutoRouteSource), nameof(RadioProfile.RouteSourceToDeviceId),
+        nameof(RadioProfile.AutoMuteSource),
     };
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -194,6 +200,14 @@ public class MainViewModel : INotifyPropertyChanged
             // next Start() since it reads Profile.Hotkey when building the hook.
             _mouseHook?.SetHotkey(Profile.Hotkey);
         }
+        else if (e.PropertyName == nameof(RadioProfile.RecenterHotkey))
+        {
+            _recenterHotkeyWatcher?.SetHotkey(Profile.RecenterHotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.VehicleToggleHotkey))
+        {
+            _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
+        }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
             try
@@ -239,6 +253,8 @@ public class MainViewModel : INotifyPropertyChanged
                 _pipeline.ApplyProfile(Profile);
                 _pipeline.SetOutputDevice(Profile.OutputDeviceId);
                 _mouseHook?.SetHotkey(Profile.Hotkey);
+                _recenterHotkeyWatcher?.SetHotkey(Profile.RecenterHotkey);
+                _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
             }
             catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
             // Source process and routing still need a manual Stop/Start.
@@ -407,6 +423,35 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private void OnVehicleTogglePressed()
+    {
+        _isInVehicle = !_isInVehicle;
+        _vehicleExitTimer?.Stop();
+        _vehicleExitTimer = null;
+
+        if (_isInVehicle)
+        {
+            _pipeline?.SetVehicleMuted(false);
+            StatusMessage = "In vehicle";
+        }
+        else
+        {
+            StatusMessage = $"Exiting vehicle — muting in {Profile.VehicleExitDelaySeconds:0.#}s";
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(Math.Max(0, Profile.VehicleExitDelaySeconds))
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                _pipeline?.SetVehicleMuted(true);
+                StatusMessage = "Out of vehicle";
+            };
+            _vehicleExitTimer = timer;
+            timer.Start();
+        }
+    }
+
     private void Start()
     {
         // The construction sequence below touches real hardware (audio
@@ -427,6 +472,8 @@ public class MainViewModel : INotifyPropertyChanged
 
         Win32MouseHook? mouseHook = null;
         RadioPipeline? pipeline = null;
+        TapHotkeyWatcher? recenterHotkeyWatcher = null;
+        TapHotkeyWatcher? vehicleToggleHotkeyWatcher = null;
         try
         {
             // Per-process loopback (WasapiProcessLoopbackCapture) requires Windows 10
@@ -465,6 +512,16 @@ public class MainViewModel : INotifyPropertyChanged
             var output = new WasapiAudioOutput();
             var effectChain = new RadioEffectChain(48000f);
             mouseHook = new Win32MouseHook(Profile.Hotkey);
+            recenterHotkeyWatcher = new TapHotkeyWatcher(Profile.RecenterHotkey, new Win32KeyStateSource());
+            recenterHotkeyWatcher.Pressed += () => Application.Current.Dispatcher.Invoke(() =>
+            {
+                _pipeline?.RecenterListener();
+                ListenerYaw = 0;
+                ListenerPitch = 0;
+            });
+
+            vehicleToggleHotkeyWatcher = new TapHotkeyWatcher(Profile.VehicleToggleHotkey, new Win32KeyStateSource());
+            vehicleToggleHotkeyWatcher.Pressed += () => Application.Current.Dispatcher.Invoke(OnVehicleTogglePressed);
             var tracker = new FreelookTracker(mouseHook, Profile);
 
             ISpatializer fallback = new StereoPanSpatializer();
@@ -485,6 +542,9 @@ public class MainViewModel : INotifyPropertyChanged
             // UI thread. Assigning "Running" afterwards would erase it.
             StatusMessage = "Running";
 
+            _isInVehicle = true;
+            if (Profile.AutoMuteSource) _sessionMuter.Mute(Profile.SourceProcessName);
+
             pipeline.Start();
 
             // Only commit to instance state once everything above has
@@ -493,6 +553,8 @@ public class MainViewModel : INotifyPropertyChanged
             // or a subsequent retry).
             _pipeline = pipeline;
             _mouseHook = mouseHook;
+            _recenterHotkeyWatcher = recenterHotkeyWatcher;
+            _vehicleToggleHotkeyWatcher = vehicleToggleHotkeyWatcher;
 
             // The hook installs on a background thread; give it a moment, then
             // warn if it failed (spec requires freelook-disabled to be visible).
@@ -535,8 +597,13 @@ public class MainViewModel : INotifyPropertyChanged
             pipeline?.Stop();
             pipeline?.Dispose();
             mouseHook?.Dispose();
+            recenterHotkeyWatcher?.Dispose();
+            vehicleToggleHotkeyWatcher?.Dispose();
             _pipeline = null;
             _mouseHook = null;
+            _recenterHotkeyWatcher = null;
+            _vehicleToggleHotkeyWatcher = null;
+            _sessionMuter.Unmute(Profile.SourceProcessName);
             if (_activeRouteRecovery is not null) RestoreSourceRouting();
             StatusMessage = $"Failed to start: {ex.Message}";
         }
@@ -555,6 +622,13 @@ public class MainViewModel : INotifyPropertyChanged
         _mouseHook?.Dispose();
         _uiTimer?.Stop();
         _uiTimer = null;
+        _vehicleExitTimer?.Stop();
+        _vehicleExitTimer = null;
+        _recenterHotkeyWatcher?.Dispose();
+        _vehicleToggleHotkeyWatcher?.Dispose();
+        _recenterHotkeyWatcher = null;
+        _vehicleToggleHotkeyWatcher = null;
+        _sessionMuter.Unmute(Profile.SourceProcessName);
         // Cleared so StartCommand.CanExecute goes true again and a fresh
         // Start() builds a new stack rather than stacking on a live one.
         _pipeline = null;
