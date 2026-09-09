@@ -118,6 +118,10 @@ public class ConfigStoreTests
             Assert.Equal(1.0f, loaded.Volume);             // default retained
             Assert.Equal(1.0f, loaded.StereoWidth);        // default retained
             Assert.False(loaded.FreelookAlwaysOn);          // default retained
+            Assert.Equal(0, loaded.RecenterHotkey.VirtualKeyCode);      // default retained (unbound)
+            Assert.Equal(0, loaded.VehicleToggleHotkey.VirtualKeyCode); // default retained (unbound)
+            Assert.Equal(3.0f, loaded.VehicleExitDelaySeconds);         // default retained
+            Assert.True(loaded.AutoMuteSource);                         // default retained
         }
         finally
         {

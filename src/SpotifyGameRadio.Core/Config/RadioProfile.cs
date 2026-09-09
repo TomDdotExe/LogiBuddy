@@ -28,6 +28,10 @@ public class RadioProfile : INotifyPropertyChanged
     private float _volume = 1.0f;
     private float _stereoWidth = 1.0f;
     private bool _freelookAlwaysOn;
+    private FreelookHotkey _recenterHotkey = new() { VirtualKeyCode = 0 };
+    private FreelookHotkey _vehicleToggleHotkey = new() { VirtualKeyCode = 0 };
+    private float _vehicleExitDelaySeconds = 3.0f;
+    private bool _autoMuteSource = true;
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -70,6 +74,26 @@ public class RadioProfile : INotifyPropertyChanged
     /// When true, freelook tracks the mouse continuously (no hold-to-look) and
     /// does not spring back to centre.
     public bool FreelookAlwaysOn { get => _freelookAlwaysOn; set => SetField(ref _freelookAlwaysOn, value); }
+
+    /// Global hotkey that fires Recenter without alt-tabbing to the window.
+    /// VirtualKeyCode 0 means unbound (never fires).
+    public FreelookHotkey RecenterHotkey { get => _recenterHotkey; set => SetField(ref _recenterHotkey, value); }
+
+    /// Global hotkey that toggles the simulated vehicle in/out state (mutes or
+    /// unmutes the processed output independent of Volume). VirtualKeyCode 0
+    /// means unbound (never fires).
+    public FreelookHotkey VehicleToggleHotkey { get => _vehicleToggleHotkey; set => SetField(ref _vehicleToggleHotkey, value); }
+
+    /// Seconds to wait after toggling "out of vehicle" before the output
+    /// actually mutes, matching games with a multi-second exit-vehicle
+    /// animation. 0 = mute (almost) immediately. Entering back "in" is always
+    /// immediate, no delay.
+    public float VehicleExitDelaySeconds { get => _vehicleExitDelaySeconds; set => SetField(ref _vehicleExitDelaySeconds, value); }
+
+    /// When true, MainViewModel mutes the source process's own Windows audio
+    /// session on Start and unmutes it on Stop, so the raw source is never
+    /// audible alongside the processed radio without a manual mixer step.
+    public bool AutoMuteSource { get => _autoMuteSource; set => SetField(ref _autoMuteSource, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
