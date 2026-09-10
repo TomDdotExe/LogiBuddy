@@ -6,12 +6,11 @@ namespace SpotifyGameRadio.Core.Tests.Tracking;
 
 public class CalibrationSessionTests
 {
-    // Effectively no idle timeout for the deterministic tests.
     private static CalibrationSession NewSession(FakeMouseInputSource input) =>
         new(input, TimeSpan.FromMinutes(5));
 
     [Fact]
-    public void Start_MovesToAwaitLeftLimit_AndAnnouncesStep()
+    public void Start_MovesToAwaitCentre_AndAnnounces()
     {
         var input = new FakeMouseInputSource();
         using var session = NewSession(input);
@@ -20,8 +19,33 @@ public class CalibrationSessionTests
 
         session.Start();
 
-        Assert.Equal(CalibrationStep.AwaitLeftLimit, session.Step);
-        Assert.Equal(CalibrationStep.AwaitLeftLimit, announced);
+        Assert.Equal(CalibrationStep.AwaitCentre, session.Step);
+        Assert.Equal(CalibrationStep.AwaitCentre, announced);
+    }
+
+    [Fact]
+    public void CentreMark_ReZeroesAccumulators()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        using var session = NewSession(input);
+        CalibrationResult? result = null;
+        session.Completed += r => result = r;
+
+        session.Start();
+        input.RaiseMove(-999, -999);   // pre-centre drift, must be discarded
+        session.Mark();                 // centre
+
+        input.RaiseMove(6000, 0);
+        session.Mark();                 // right limit
+
+        input.RaiseMove(-2000, -3000);  // net from centre: x +4000, y -3000
+        session.Mark();                 // corner
+
+        Assert.Equal(CalibrationStep.Completed, session.Step);
+        Assert.NotNull(result);
+        Assert.Equal(6000f, result!.HalfSweepCounts, precision: 3);
+        Assert.Equal(4000f, result.CornerXCounts, precision: 3);
+        Assert.Equal(-3000f, result.CornerYCounts, precision: 3);
     }
 
     [Fact]
@@ -33,82 +57,79 @@ public class CalibrationSessionTests
         session.Completed += r => result = r;
 
         session.Start();
-        input.RaiseMove(-2000, 0);
-        input.RaiseMove(-2000, 0);
-        session.Mark(); // left limit captured as 0
-
+        session.Mark();                       // centre (nothing moved)
+        input.RaiseMove(5000, 5000);          // ignored, key not held
         input.IsHotkeyHeld = true;
-        input.RaiseMove(9000, 0);
-        session.Mark();
+        input.RaiseMove(6000, 0);
+        session.Mark();                       // right
+        input.RaiseMove(0, -2000);
+        session.Mark();                       // corner
 
-        Assert.Equal(CalibrationStep.Completed, session.Step);
-        Assert.NotNull(result);
-        Assert.Equal(4500f, result!.MeasuredHalfSweepCounts, precision: 3);
+        Assert.Equal(6000f, result!.HalfSweepCounts, precision: 3);
+        Assert.Equal(6000f, result.CornerXCounts, precision: 3);
+        Assert.Equal(-2000f, result.CornerYCounts, precision: 3);
     }
 
     [Fact]
-    public void HappyPath_TwoMarks_CompletesWithHalfSweep()
-    {
-        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
-        using var session = NewSession(input);
-        CalibrationResult? result = null;
-        session.Completed += r => result = r;
-
-        session.Start();
-        input.RaiseMove(-1500, 0);
-        input.RaiseMove(-2500, 0);   // accumulator now -4000
-        session.Mark();              // -> AwaitRightLimit, accumulator re-zeroed
-        Assert.Equal(CalibrationStep.AwaitRightLimit, session.Step);
-
-        input.RaiseMove(3000, 0);
-        input.RaiseMove(5000, 0);    // accumulator now +8000
-        session.Mark();              // -> Completed
-
-        Assert.Equal(CalibrationStep.Completed, session.Step);
-        Assert.NotNull(result);
-        Assert.Equal(4000f, result!.MeasuredHalfSweepCounts, precision: 3);
-    }
-
-    [Fact]
-    public void SweepTooSmall_Fails_WithReason_AndNoResult()
+    public void RightSweepTooSmall_Fails()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         using var session = NewSession(input);
         var completed = false;
-        string? endedReason = null;
+        string? ended = null;
         session.Completed += _ => completed = true;
-        session.Ended += r => endedReason = r;
+        session.Ended += r => ended = r;
 
         session.Start();
-        input.RaiseMove(10, 0);
-        session.Mark();
-        input.RaiseMove(20, 0);      // full sweep only 20 counts
-        session.Mark();
+        session.Mark();               // centre
+        input.RaiseMove(20, 0);
+        session.Mark();               // right, only 20 counts
 
         Assert.Equal(CalibrationStep.Failed, session.Step);
         Assert.False(completed);
-        Assert.False(string.IsNullOrWhiteSpace(endedReason));
+        Assert.False(string.IsNullOrWhiteSpace(ended));
     }
 
     [Fact]
-    public void Abort_FromAwaitRightLimit_EndsAndIgnoresLaterMarks()
+    public void CornerTooCloseToCentre_Fails()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         using var session = NewSession(input);
-        string? endedReason = null;
-        session.Ended += r => endedReason = r;
+        var completed = false;
+        session.Completed += _ => completed = true;
 
         session.Start();
-        input.RaiseMove(-5000, 0);
-        session.Mark();              // AwaitRightLimit
-        session.Abort();
+        session.Mark();               // centre
+        input.RaiseMove(6000, 0);
+        session.Mark();               // right
+        input.RaiseMove(-6000, 10);   // back near centre: x 0, y 10 -> distance 10
+        session.Mark();               // corner
 
-        Assert.Equal(CalibrationStep.Aborted, session.Step);
-        Assert.False(string.IsNullOrWhiteSpace(endedReason));
+        Assert.Equal(CalibrationStep.Failed, session.Step);
+        Assert.False(completed);
+    }
 
-        input.RaiseMove(9999, 0);
-        session.Mark();              // no-op
-        Assert.Equal(CalibrationStep.Aborted, session.Step);
+    [Fact]
+    public void Abort_FromEachAwaitStep_EndsAndIgnoresLaterMarks()
+    {
+        foreach (var marksBeforeAbort in new[] { 0, 1, 2 })
+        {
+            var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+            using var session = NewSession(input);
+            string? ended = null;
+            session.Ended += r => ended = r;
+
+            session.Start();
+            for (int i = 0; i < marksBeforeAbort; i++) { input.RaiseMove(6000, 0); session.Mark(); }
+            session.Abort();
+
+            Assert.Equal(CalibrationStep.Aborted, session.Step);
+            Assert.False(string.IsNullOrWhiteSpace(ended));
+
+            input.RaiseMove(9999, 0);
+            session.Mark();
+            Assert.Equal(CalibrationStep.Aborted, session.Step);
+        }
     }
 
     [Fact]
@@ -117,25 +138,26 @@ public class CalibrationSessionTests
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         using var session = NewSession(input);
         session.Start();
-        input.RaiseMove(-4000, 0); session.Mark();
-        input.RaiseMove(8000, 0); session.Mark();
-
-        var stepAfter = session.Step;
         session.Mark();
-        Assert.Equal(stepAfter, session.Step);
+        input.RaiseMove(6000, 0); session.Mark();
+        input.RaiseMove(0, -3000); session.Mark();
+
+        var step = session.Step;
+        session.Mark();
+        Assert.Equal(step, session.Step);
     }
 
     [Fact]
-    public void Dispose_Unsubscribes_FurtherMovementIsInert()
+    public void Dispose_Unsubscribes()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var session = NewSession(input);
         session.Start();
         session.Dispose();
 
-        var ex = Record.Exception(() => input.RaiseMove(5000, 0));
+        var ex = Record.Exception(() => input.RaiseMove(5000, 5000));
         Assert.Null(ex);
-        Assert.Equal(CalibrationStep.AwaitLeftLimit, session.Step); // unchanged by post-dispose movement
+        Assert.Equal(CalibrationStep.AwaitCentre, session.Step);
     }
 
     [Fact]
@@ -143,13 +165,13 @@ public class CalibrationSessionTests
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         using var session = new CalibrationSession(input, TimeSpan.FromMilliseconds(80));
-        string? endedReason = null;
-        session.Ended += r => endedReason = r;
+        string? ended = null;
+        session.Ended += r => ended = r;
 
         session.Start();
-        System.Threading.Thread.Sleep(250); // the one place a sleep is unavoidable
+        System.Threading.Thread.Sleep(250);
 
         Assert.Equal(CalibrationStep.Failed, session.Step);
-        Assert.Contains("timed out", endedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("timed out", ended, StringComparison.OrdinalIgnoreCase);
     }
 }

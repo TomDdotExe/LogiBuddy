@@ -3,15 +3,20 @@ using Timer = System.Timers.Timer;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-public enum CalibrationStep { Idle, AwaitLeftLimit, AwaitRightLimit, Completed, Failed, Aborted }
+public enum CalibrationStep { Idle, AwaitCentre, AwaitRightLimit, AwaitCorner, Completed, Failed, Aborted }
 
-public sealed record CalibrationResult(float MeasuredHalfSweepCounts);
+/// All counts are centre-relative (measured from the centre mark).
+/// CornerYCounts is +down, matching the raw mouse hook's dy sign.
+public sealed record CalibrationResult(float HalfSweepCounts, float CornerXCounts, float CornerYCounts);
 
 /// Guided freelook calibration. Subscribes to a live mouse input source,
-/// sums horizontal counts while the freelook key is held, and advances on
-/// Mark() calls (driven by a global tap-hotkey). Two marks — one at each
-/// game view limit — yield the full sweep; half of it is the centre-to-limit
-/// count the view model turns into MouseSensitivity.
+/// sums horizontal and vertical counts while the freelook key is held, and
+/// advances on Mark() calls (driven by a global tap-hotkey). Three marks:
+///   centre  — establishes the zero reference
+///   right   — horizontal half-sweep to the game's yaw limit
+///   corner  — far up-and-to-one-side extreme
+/// The view model turns these into MouseSensitivity, MaxPitchDegrees, and
+/// the combined off-axis clamp.
 public sealed class CalibrationSession : IDisposable
 {
     private const long MinValidSweepCounts = 50;
@@ -20,7 +25,9 @@ public sealed class CalibrationSession : IDisposable
     private readonly Timer _idleTimer;
     private readonly object _gate = new();
 
-    private long _accum;
+    private long _accumX;
+    private long _accumY;
+    private long _halfSweep;
     private bool _disposed;
 
     public CalibrationStep Step { get; private set; } = CalibrationStep.Idle;
@@ -43,13 +50,15 @@ public sealed class CalibrationSession : IDisposable
         _idleTimer.Elapsed += OnIdleTimeout;
     }
 
-    private bool IsActive => Step is CalibrationStep.AwaitLeftLimit or CalibrationStep.AwaitRightLimit;
+    private bool IsActive => Step is CalibrationStep.AwaitCentre
+        or CalibrationStep.AwaitRightLimit
+        or CalibrationStep.AwaitCorner;
 
     private void OnMouseMoved(int dx, int dy)
     {
-        // Cheap unsynchronised gate; the Interlocked.Add is the real guard.
         if (!IsActive || !_input.IsHotkeyHeld) return;
-        Interlocked.Add(ref _accum, dx);
+        Interlocked.Add(ref _accumX, dx);
+        Interlocked.Add(ref _accumY, dy);
     }
 
     public void Start() => Raise(() =>
@@ -57,10 +66,13 @@ public sealed class CalibrationSession : IDisposable
         lock (_gate)
         {
             if (Step != CalibrationStep.Idle) return null;
-            Interlocked.Exchange(ref _accum, 0);
-            Step = CalibrationStep.AwaitLeftLimit;
+            Interlocked.Exchange(ref _accumX, 0);
+            Interlocked.Exchange(ref _accumY, 0);
+            Step = CalibrationStep.AwaitCentre;
             RestartTimer();
-            return (Step, "Hold freelook, look fully LEFT until the view stops, then tap Mark.", (CalibrationResult?)null);
+            return (Step,
+                "Calibration started. Get into the game, face straight forward, hold freelook, then tap Mark.",
+                (CalibrationResult?)null);
         }
     });
 
@@ -70,24 +82,44 @@ public sealed class CalibrationSession : IDisposable
         {
             switch (Step)
             {
-                case CalibrationStep.AwaitLeftLimit:
-                    Interlocked.Exchange(ref _accum, 0);
+                case CalibrationStep.AwaitCentre:
+                    Interlocked.Exchange(ref _accumX, 0);
+                    Interlocked.Exchange(ref _accumY, 0);
                     Step = CalibrationStep.AwaitRightLimit;
                     RestartTimer();
-                    return (Step, "Now look fully RIGHT until the view stops, then tap Mark.", (CalibrationResult?)null);
+                    return (Step,
+                        "Centre set. Look fully RIGHT until the view stops, then tap Mark.",
+                        (CalibrationResult?)null);
 
                 case CalibrationStep.AwaitRightLimit:
-                    _idleTimer.Stop();
-                    long sweep = Math.Abs(Interlocked.Read(ref _accum));
-                    if (sweep < MinValidSweepCounts)
+                    long half = Math.Abs(Interlocked.Read(ref _accumX));
+                    if (half < MinValidSweepCounts)
                     {
+                        _idleTimer.Stop();
                         Step = CalibrationStep.Failed;
                         return (Step,
-                            "Calibration failed: the sweep was too small. Hold the freelook key and turn all the way to each limit.",
+                            "That sweep was too small. Try again — hold freelook and turn all the way to the limit.",
                             (CalibrationResult?)null);
                     }
+                    _halfSweep = half; // keep; do NOT re-zero — the corner is measured from the same centre
+                    Step = CalibrationStep.AwaitCorner;
+                    RestartTimer();
+                    return (Step,
+                        "Right limit set. Now look to the far corner — as far up and to one side as the game allows — then tap Mark.",
+                        (CalibrationResult?)null);
+
+                case CalibrationStep.AwaitCorner:
+                    _idleTimer.Stop();
+                    long cx = Interlocked.Read(ref _accumX);
+                    long cy = Interlocked.Read(ref _accumY);
+                    if (Math.Sqrt((double)cx * cx + (double)cy * cy) < MinValidSweepCounts)
+                    {
+                        Step = CalibrationStep.Failed;
+                        return (Step, "That corner was too close to centre. Try again.", (CalibrationResult?)null);
+                    }
                     Step = CalibrationStep.Completed;
-                    return (Step, "Calibration done — sensitivity updated.", new CalibrationResult(sweep / 2f));
+                    return (Step, "Corner set. Calibration complete.",
+                        new CalibrationResult(_halfSweep, cx, cy));
 
                 default:
                     return null;
