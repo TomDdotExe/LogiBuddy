@@ -7,13 +7,15 @@
   (driver quirks) — the first failed Start silently switches to
   whole-device capture and shows a one-line notice.
 - .NET 8 SDK.
-- `phonon.dll` (Steam Audio's native HRTF library, MIT licensed):
+- `phonon.dll` (Steam Audio's native HRTF library, Apache-2.0 licensed):
   - **End users:** it is already bundled in the release ZIP, next to the
-    `.exe` — nothing to do.
+    `.exe` — nothing to do. Its licence terms are in the ZIP's
+    `THIRD-PARTY-NOTICES.txt`.
   - **Developers:** run `./build/fetch-phonon.ps1` once. It downloads the
-    pinned Steam Audio 4.8.1 release, verifies its checksum, and places
-    the DLL at
-    `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`.
+    pinned Steam Audio 4.8.1 release, verifies its checksum, places the
+    DLL at
+    `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`, and
+    fetches the licence texts into `build/third-party/`.
   Without the DLL the app still runs but falls back to simple stereo
   panning instead of true HRTF. The 4.x API is required — the project's
   native struct layouts were written against it.

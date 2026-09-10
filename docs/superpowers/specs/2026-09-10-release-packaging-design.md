@@ -1,7 +1,26 @@
 # Release packaging — portable ZIP with bundled phonon.dll
 
 Date: 2026-09-10
-Status: Approved (brainstorming)
+Status: Implemented (commits 9feb719, da931ae, de05337)
+
+## Implementation deviations from the approved design
+
+- **Steam Audio 4.8.1 is Apache License 2.0, not MIT** (the brainstorming
+  notes and the old `SETUP.md` said MIT). The binary release archive
+  ships **no license file at all** — only `steamaudio/THIRDPARTY.md`
+  (notices for IPP, FFTS, etc. linked into `phonon.dll`). So
+  `fetch-phonon.ps1` downloads `LICENSE.md` from the pinned git tag
+  (`.../steam-audio/v4.8.1/LICENSE.md`, hash-pinned) and extracts
+  `THIRDPARTY.md` from the archive. `THIRD-PARTY-NOTICES.txt` ships both.
+- Added `<AssemblyName>SpotifyGameRadio</AssemblyName>` to the App csproj
+  so the shipped executable is `SpotifyGameRadio.exe`, not
+  `SpotifyGameRadio.App.exe`. Nothing derives paths from the assembly
+  name (profile dir, debug log path are string literals).
+- `.ps1` here-strings are kept ASCII-only — Windows PowerShell 5.1 reads
+  script files as ANSI and mangles non-ASCII punctuation.
+
+The rest of this document is the design as approved; read it together
+with the deviations above.
 
 ## Problem
 
