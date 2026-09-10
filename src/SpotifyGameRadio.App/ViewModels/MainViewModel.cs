@@ -30,7 +30,7 @@ public class MainViewModel : INotifyPropertyChanged
     private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
     private CalibrationSession? _calibrationSession;
     private TapHotkeyWatcher? _calibrateMarkWatcher;
-    private readonly CalibrationCuePlayer _cuePlayer = new();
+    private readonly CalibrationAnnouncer _announcer;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
     {
@@ -160,6 +160,7 @@ public class MainViewModel : INotifyPropertyChanged
                  && Profile.Hotkey.VirtualKeyCode != 0
                  && Profile.CalibrateHotkey.VirtualKeyCode != 0
                  && Profile.CalibrateHotkey.VirtualKeyCode != Profile.Hotkey.VirtualKeyCode);
+        _announcer = new CalibrationAnnouncer(() => Profile.OutputDeviceId);
 
         RefreshSources();
         Profile.PropertyChanged += OnProfilePropertyChanged;
@@ -195,7 +196,11 @@ public class MainViewModel : INotifyPropertyChanged
         if (e.PropertyName == nameof(RadioProfile.MaxYawDegrees)
             && Profile.MeasuredYawSweepCounts > 0f)
         {
-            Profile.MouseSensitivity = Profile.MaxYawDegrees / Profile.MeasuredYawSweepCounts;
+            float oldSens = Profile.MouseSensitivity;
+            float newSens = Profile.MaxYawDegrees / Profile.MeasuredYawSweepCounts;
+            if (oldSens > 0f && Profile.MeasuredMaxOffAxisDegrees > 0f)
+                Profile.MeasuredMaxOffAxisDegrees *= newSens / oldSens;
+            Profile.MouseSensitivity = newSens;
         }
 
         if (LiveProfileProperties.Contains(e.PropertyName))
@@ -514,21 +519,30 @@ public class MainViewModel : INotifyPropertyChanged
         session.StepChanged += (step, message) => Application.Current?.Dispatcher.Invoke(() =>
         {
             StatusMessage = message;
-            if (step == CalibrationStep.AwaitRightLimit) _cuePlayer.Captured();
+            _announcer.Say(StepPhrase(step));
         });
         session.Completed += result => Application.Current?.Dispatcher.Invoke(() =>
         {
-            Profile.MeasuredYawSweepCounts = result.MeasuredHalfSweepCounts;
-            Profile.MouseSensitivity = Profile.MaxYawDegrees / result.MeasuredHalfSweepCounts;
-            _cuePlayer.Done();
+            float sens = Profile.MaxYawDegrees / result.HalfSweepCounts;
+            float cornerYawDeg = MathF.Abs(result.CornerXCounts) * sens;
+            float cornerPitchDeg = MathF.Abs(result.CornerYCounts) * sens;
+
+            Profile.MouseSensitivity = sens;
+            Profile.MeasuredYawSweepCounts = result.HalfSweepCounts;
+            if (cornerPitchDeg > 1f) Profile.MaxPitchDegrees = cornerPitchDeg;
+            Profile.MeasuredMaxOffAxisDegrees =
+                MathF.Sqrt(cornerYawDeg * cornerYawDeg + cornerPitchDeg * cornerPitchDeg);
+
+            _announcer.Say("Corner set. Calibration complete.");
             StatusMessage =
-                $"Calibration done — mouse sensitivity set to {Profile.MouseSensitivity:0.####}. Click Save Profile to keep it.";
+                $"Calibration complete — sensitivity {sens:0.####}, max pitch {Profile.MaxPitchDegrees:0.#}°, " +
+                $"off-axis limit {Profile.MeasuredMaxOffAxisDegrees:0.#}°. Click Save Profile to keep it.";
             TeardownCalibration();
         });
         session.Ended += reason => Application.Current?.Dispatcher.Invoke(() =>
         {
             StatusMessage = reason;
-            _cuePlayer.Failed();
+            _announcer.Say(reason);
             TeardownCalibration();
         });
 
@@ -544,6 +558,17 @@ public class MainViewModel : INotifyPropertyChanged
         _calibrationSession?.Dispose();
         _calibrationSession = null;
     }
+
+    /// Spoken prompt for a mid-calibration step. Terminal steps are
+    /// announced by the Completed / Ended handlers instead, so they return
+    /// "" here (CalibrationAnnouncer.Say ignores blank text).
+    private static string StepPhrase(CalibrationStep step) => step switch
+    {
+        CalibrationStep.AwaitCentre => "Calibration started. Face forward and tap to set centre.",
+        CalibrationStep.AwaitRightLimit => "Centre set. Now look fully right and tap.",
+        CalibrationStep.AwaitCorner => "Right limit set. Now look to the far corner and tap.",
+        _ => "",
+    };
 
     private void Start()
     {
@@ -784,7 +809,7 @@ public class MainViewModel : INotifyPropertyChanged
             _calibrationSession.Abort();
             TeardownCalibration();
         }
-        _cuePlayer.Dispose();
+        _announcer.Dispose();
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

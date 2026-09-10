@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
         xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
-        Title="Spotify Game Radio" Height="990" Width="640">
+        Title="Spotify Game Radio" Height="960" Width="640">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -31,11 +31,10 @@
             <RowDefinition Height="Auto" /> <!-- 16 mouse sensitivity -->
             <RowDefinition Height="Auto" /> <!-- 17 max yaw -->
             <RowDefinition Height="Auto" /> <!-- 18 max pitch -->
-            <RowDefinition Height="Auto" /> <!-- 19 spring-back -->
-            <RowDefinition Height="Auto" /> <!-- 20 freelook calibration -->
-            <RowDefinition Height="Auto" /> <!-- 21 buttons + restart hint -->
-            <RowDefinition Height="Auto" /> <!-- 22 canvas + height -->
-            <RowDefinition Height="*" />    <!-- 23 status -->
+            <RowDefinition Height="Auto" /> <!-- 19 freelook calibration -->
+            <RowDefinition Height="Auto" /> <!-- 20 buttons + restart hint -->
+            <RowDefinition Height="Auto" /> <!-- 21 canvas + height -->
+            <RowDefinition Height="*" />    <!-- 22 status -->
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -160,11 +159,6 @@
         </StackPanel>
 
         <StackPanel Grid.Row="19" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Spring-back (°/s):" VerticalAlignment="Center" Width="140" />
-            <Slider Minimum="0" Maximum="2000" Width="200" Value="{Binding Profile.SpringBackRatePerSecond}" />
-        </StackPanel>
-
-        <StackPanel Grid.Row="20" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Calibrate hotkey:" VerticalAlignment="Center" Width="140" />
             <controls:HotkeyCaptureControl Hotkey="{Binding Profile.CalibrateHotkey, Mode=TwoWay}" />
             <Button Content="Calibrate freelook" Command="{Binding CalibrateFreelookCommand}" Margin="8,0,0,0"
@@ -172,7 +166,7 @@
             <TextBlock Text=" run while playing; needs a freelook key too" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="Gray" />
         </StackPanel>
 
-        <StackPanel Grid.Row="21" Orientation="Horizontal" Margin="0,0,0,8">
+        <StackPanel Grid.Row="20" Orientation="Horizontal" Margin="0,0,0,8">
             <Button Content="Start" Command="{Binding StartCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Stop" Command="{Binding StopCommand}" Width="80" Margin="0,0,8,0" />
             <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="100" />
@@ -181,7 +175,7 @@
                        Text="Restart (Stop then Start) to apply source / routing / mute changes." />
         </StackPanel>
 
-        <StackPanel Grid.Row="22" Orientation="Horizontal" HorizontalAlignment="Left">
+        <StackPanel Grid.Row="21" Orientation="Horizontal" HorizontalAlignment="Left">
             <controls:SourcePositionCanvas
                 SourceX="{Binding Profile.SourceX}"
                 SourceZ="{Binding Profile.SourceZ}"
@@ -193,7 +187,7 @@
                     ToolTip="Raises or lowers the source. Audible on the HRTF path; the stereo-pan fallback has no elevation cue." />
         </StackPanel>
 
-        <StackPanel Grid.Row="23" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">
+        <StackPanel Grid.Row="22" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Top">
             <TextBlock Text="{Binding StatusMessage}" FontWeight="Bold" TextWrapping="Wrap" MaxWidth="400" />
             <TextBlock Text="{Binding BufferUnderrunCount, StringFormat=' (underruns: {0})'}" Margin="8,0,0,0" />
         </StackPanel>
