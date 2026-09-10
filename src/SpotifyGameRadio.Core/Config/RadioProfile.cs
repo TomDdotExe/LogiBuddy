@@ -34,6 +34,7 @@ public class RadioProfile : INotifyPropertyChanged
     private bool _autoMuteSource = false;
     private FreelookHotkey _calibrateHotkey = new() { VirtualKeyCode = 0 };
     private float _measuredYawSweepCounts = 0f;
+    private float _measuredMaxOffAxisDegrees = 0f;
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -113,6 +114,12 @@ public class RadioProfile : INotifyPropertyChanged
     /// 0 means "never calibrated". When > 0, MainViewModel re-derives
     /// MouseSensitivity from it whenever MaxYawDegrees changes.
     public float MeasuredYawSweepCounts { get => _measuredYawSweepCounts; set => SetField(ref _measuredYawSweepCounts, value); }
+
+    /// Largest angle from "straight ahead" the game's freelook allows,
+    /// captured by the calibration "corner" mark. 0 means "no
+    /// combined-angle clamp" (per-axis clamps only). FreelookTracker
+    /// clamps sqrt(yaw^2 + pitch^2) to this when > 0.
+    public float MeasuredMaxOffAxisDegrees { get => _measuredMaxOffAxisDegrees; set => SetField(ref _measuredMaxOffAxisDegrees, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

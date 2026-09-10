@@ -52,6 +52,7 @@ public class RadioProfileTests
 
         Assert.Equal(0, profile.CalibrateHotkey.VirtualKeyCode); // unbound
         Assert.Equal(0f, profile.MeasuredYawSweepCounts);
+        Assert.Equal(0f, profile.MeasuredMaxOffAxisDegrees);
     }
 
     [Fact]
@@ -63,8 +64,10 @@ public class RadioProfileTests
 
         profile.CalibrateHotkey = new FreelookHotkey { VirtualKeyCode = 0x4F };
         profile.MeasuredYawSweepCounts = 3200f;
+        profile.MeasuredMaxOffAxisDegrees = 55f;
 
         Assert.Contains(nameof(RadioProfile.CalibrateHotkey), changed);
         Assert.Contains(nameof(RadioProfile.MeasuredYawSweepCounts), changed);
+        Assert.Contains(nameof(RadioProfile.MeasuredMaxOffAxisDegrees), changed);
     }
 }
