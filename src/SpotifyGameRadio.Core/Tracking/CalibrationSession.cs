@@ -3,16 +3,17 @@ using Timer = System.Timers.Timer;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-public enum CalibrationStep { Idle, AwaitCentre, AwaitRightLimit, AwaitCorner, Completed, Failed, Aborted }
+public enum CalibrationStep { Idle, AwaitRightLimit, AwaitCorner, Completed, Failed, Aborted }
 
-/// All counts are centre-relative (measured from the centre mark).
+/// All counts are centre-relative — Start() zeroes the accumulators at the
+/// instant calibration begins (the user is facing forward then).
 /// CornerYCounts is +down, matching the raw mouse hook's dy sign.
 public sealed record CalibrationResult(float HalfSweepCounts, float CornerXCounts, float CornerYCounts);
 
-/// Guided freelook calibration. Subscribes to a live mouse input source,
-/// sums horizontal and vertical counts while the freelook key is held, and
-/// advances on Mark() calls (driven by a global tap-hotkey). Three marks:
-///   centre  — establishes the zero reference
+/// Guided freelook calibration. Subscribes to a live mouse input source and
+/// sums horizontal and vertical counts whenever a step is active — it does
+/// NOT require the freelook key to be held, so it works with hold-to-look,
+/// toggle, and always-on freelook alike. Two marks after Start():
 ///   right   — horizontal half-sweep to the game's yaw limit
 ///   corner  — far up-and-to-one-side extreme
 /// The view model turns these into MouseSensitivity, MaxPitchDegrees, and
@@ -50,13 +51,12 @@ public sealed class CalibrationSession : IDisposable
         _idleTimer.Elapsed += OnIdleTimeout;
     }
 
-    private bool IsActive => Step is CalibrationStep.AwaitCentre
-        or CalibrationStep.AwaitRightLimit
+    private bool IsActive => Step is CalibrationStep.AwaitRightLimit
         or CalibrationStep.AwaitCorner;
 
     private void OnMouseMoved(int dx, int dy)
     {
-        if (!IsActive || !_input.IsHotkeyHeld) return;
+        if (!IsActive) return;
         Interlocked.Add(ref _accumX, dx);
         Interlocked.Add(ref _accumY, dy);
     }
@@ -68,10 +68,10 @@ public sealed class CalibrationSession : IDisposable
             if (Step != CalibrationStep.Idle) return null;
             Interlocked.Exchange(ref _accumX, 0);
             Interlocked.Exchange(ref _accumY, 0);
-            Step = CalibrationStep.AwaitCentre;
+            Step = CalibrationStep.AwaitRightLimit;
             RestartTimer();
             return (Step,
-                "Calibration started. Get into the game, face straight forward, hold freelook, then tap Mark.",
+                "Calibration started. Face forward, then look fully RIGHT until the view stops, and tap Mark.",
                 (CalibrationResult?)null);
         }
     });
@@ -82,15 +82,6 @@ public sealed class CalibrationSession : IDisposable
         {
             switch (Step)
             {
-                case CalibrationStep.AwaitCentre:
-                    Interlocked.Exchange(ref _accumX, 0);
-                    Interlocked.Exchange(ref _accumY, 0);
-                    Step = CalibrationStep.AwaitRightLimit;
-                    RestartTimer();
-                    return (Step,
-                        "Centre set. Look fully RIGHT until the view stops, then tap Mark.",
-                        (CalibrationResult?)null);
-
                 case CalibrationStep.AwaitRightLimit:
                     long half = Math.Abs(Interlocked.Read(ref _accumX));
                     if (half < MinValidSweepCounts)
@@ -98,7 +89,7 @@ public sealed class CalibrationSession : IDisposable
                         _idleTimer.Stop();
                         Step = CalibrationStep.Failed;
                         return (Step,
-                            "That sweep was too small. Try again — hold freelook and turn all the way to the limit.",
+                            "That sweep was too small. Try again — with freelook active, turn all the way to the limit.",
                             (CalibrationResult?)null);
                     }
                     _halfSweep = half; // keep; do NOT re-zero — the corner is measured from the same centre

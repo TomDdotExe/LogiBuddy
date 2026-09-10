@@ -1,8 +1,37 @@
 # Freelook calibration — drift correction and spoken cues
 
 Date: 2026-09-10
-Status: Approved (brainstorming)
+Status: Implemented, then revised (see "Post-testing revision" below)
 Supersedes parts of: `docs/superpowers/specs/2026-09-10-freelook-calibration-design.md`
+
+## Post-testing revision (2026-09-10)
+
+User testing showed "sweep too small" when trying to calibrate, and asked
+to start calibration from the hotkey. Changes made on top of the design
+below:
+
+- **`CalibrationSession` no longer gates accumulation on the freelook key
+  being held.** It sums all mouse movement while a step is active, so it
+  works with hold-to-look, toggle, and always-on freelook alike (the user
+  reported "mix / both").
+- **The explicit "centre" mark is removed.** `Start()` zeroes the
+  accumulators at that instant (the user is facing forward then) and goes
+  straight to `AwaitRightLimit`. Enum is now
+  `Idle, AwaitRightLimit, AwaitCorner, Completed, Failed, Aborted`. The
+  flow is: start → sweep right → mark → sweep to corner → mark → done —
+  two marks, each after a sweep, so it can't be "tapped through" into the
+  too-small guard.
+- **The calibrate hotkey now starts calibration too.** A persistent
+  `TapHotkeyWatcher` on `Profile.CalibrateHotkey` lives while the pipeline
+  runs (created in `Start()`, disposed in `Stop()`, like the Recenter /
+  Vehicle watchers). Its press starts a session when none is running,
+  otherwise marks. The window button still starts / cancels. The
+  per-session mark watcher is gone; `MainViewModel.BeginCalibration()` is
+  the shared start path and re-checks the CanExecute conditions because
+  the hotkey bypasses the command.
+
+The sections below describe the pre-revision three-mark design; read them
+with the above applied.
 
 ## Why
 

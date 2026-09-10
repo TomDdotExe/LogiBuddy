@@ -29,7 +29,7 @@ public class MainViewModel : INotifyPropertyChanged
     private bool _isInVehicle = true;
     private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
     private CalibrationSession? _calibrationSession;
-    private TapHotkeyWatcher? _calibrateMarkWatcher;
+    private TapHotkeyWatcher? _calibrateHotkeyWatcher;
     private readonly CalibrationAnnouncer _announcer;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
@@ -231,7 +231,7 @@ public class MainViewModel : INotifyPropertyChanged
         }
         else if (e.PropertyName == nameof(RadioProfile.CalibrateHotkey))
         {
-            _calibrateMarkWatcher?.SetHotkey(Profile.CalibrateHotkey);
+            _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
         }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
@@ -285,6 +285,7 @@ public class MainViewModel : INotifyPropertyChanged
                 _mouseHook?.SetHotkey(Profile.Hotkey);
                 _recenterHotkeyWatcher?.SetHotkey(Profile.RecenterHotkey);
                 _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
+                _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
             }
             catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
             // Source process and routing still need a manual Stop/Start.
@@ -496,10 +497,8 @@ public class MainViewModel : INotifyPropertyChanged
         ListenerPitch = 0;
     }
 
-    /// Entry point for the "Calibrate freelook" button. Starts a
-    /// CalibrationSession over the live mouse hook, or aborts one already
-    /// running (the button doubles as Cancel). Only reachable while the
-    /// pipeline is running — see CalibrateFreelookCommand.CanExecute.
+    /// "Calibrate freelook" button: start a calibration session, or abort
+    /// one already running (the button doubles as Cancel).
     private void StartOrAbortCalibration()
     {
         if (_calibrationSession is not null)
@@ -507,14 +506,33 @@ public class MainViewModel : INotifyPropertyChanged
             _calibrationSession.Abort(); // the Ended handler tears down
             return;
         }
+        BeginCalibration();
+    }
+
+    /// Calibrate hotkey press (persistent watcher, live while the pipeline
+    /// runs): start a session if none is running, otherwise mark the
+    /// current step — so the whole flow works from in-game.
+    private void OnCalibrateHotkeyPressed()
+    {
+        if (_calibrationSession is not null) _calibrationSession.Mark();
+        else BeginCalibration();
+    }
+
+    /// Shared start path for the button and the hotkey. Guards the same
+    /// conditions as CalibrateFreelookCommand.CanExecute, since the hotkey
+    /// path does not go through it.
+    private void BeginCalibration()
+    {
+        if (_calibrationSession is not null) return;
         if (_pipeline is null || _mouseHook is null) return;
+        if (Profile.Hotkey.VirtualKeyCode == 0
+            || Profile.CalibrateHotkey.VirtualKeyCode == 0
+            || Profile.CalibrateHotkey.VirtualKeyCode == Profile.Hotkey.VirtualKeyCode)
+            return;
 
         Recenter();
 
         var session = new CalibrationSession(_mouseHook);
-        var markWatcher = new TapHotkeyWatcher(Profile.CalibrateHotkey, new Win32KeyStateSource());
-        markWatcher.Pressed += () =>
-            Application.Current?.Dispatcher.Invoke(() => _calibrationSession?.Mark());
 
         session.StepChanged += (step, message) => Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -547,14 +565,11 @@ public class MainViewModel : INotifyPropertyChanged
         });
 
         _calibrationSession = session;
-        _calibrateMarkWatcher = markWatcher;
         session.Start();
     }
 
     private void TeardownCalibration()
     {
-        _calibrateMarkWatcher?.Dispose();
-        _calibrateMarkWatcher = null;
         _calibrationSession?.Dispose();
         _calibrationSession = null;
     }
@@ -564,8 +579,7 @@ public class MainViewModel : INotifyPropertyChanged
     /// "" here (CalibrationAnnouncer.Say ignores blank text).
     private static string StepPhrase(CalibrationStep step) => step switch
     {
-        CalibrationStep.AwaitCentre => "Calibration started. Face forward and tap to set centre.",
-        CalibrationStep.AwaitRightLimit => "Centre set. Now look fully right and tap.",
+        CalibrationStep.AwaitRightLimit => "Calibration started. Face forward, then look fully right and tap.",
         CalibrationStep.AwaitCorner => "Right limit set. Now look to the far corner and tap.",
         _ => "",
     };
@@ -592,6 +606,7 @@ public class MainViewModel : INotifyPropertyChanged
         RadioPipeline? pipeline = null;
         TapHotkeyWatcher? recenterHotkeyWatcher = null;
         TapHotkeyWatcher? vehicleToggleHotkeyWatcher = null;
+        TapHotkeyWatcher? calibrateHotkeyWatcher = null;
         try
         {
             // Per-process loopback (WasapiProcessLoopbackCapture) requires Windows 10
@@ -655,6 +670,16 @@ public class MainViewModel : INotifyPropertyChanged
                 }
                 catch (Exception) { /* app is shutting down; nothing to toggle */ }
             };
+
+            calibrateHotkeyWatcher = new TapHotkeyWatcher(Profile.CalibrateHotkey, new Win32KeyStateSource());
+            calibrateHotkeyWatcher.Pressed += () =>
+            {
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(OnCalibrateHotkeyPressed);
+                }
+                catch (Exception) { /* app is shutting down */ }
+            };
             var tracker = new FreelookTracker(mouseHook, Profile);
 
             ISpatializer fallback = new StereoPanSpatializer();
@@ -700,6 +725,7 @@ public class MainViewModel : INotifyPropertyChanged
             _mouseHook = mouseHook;
             _recenterHotkeyWatcher = recenterHotkeyWatcher;
             _vehicleToggleHotkeyWatcher = vehicleToggleHotkeyWatcher;
+            _calibrateHotkeyWatcher = calibrateHotkeyWatcher;
 
             // The hook installs on a background thread; give it a moment, then
             // warn if it failed (spec requires freelook-disabled to be visible).
@@ -744,6 +770,7 @@ public class MainViewModel : INotifyPropertyChanged
             mouseHook?.Dispose();
             recenterHotkeyWatcher?.Dispose();
             vehicleToggleHotkeyWatcher?.Dispose();
+            calibrateHotkeyWatcher?.Dispose();
             _pipeline = null;
             _mouseHook = null;
             _recenterHotkeyWatcher = null;
@@ -780,8 +807,10 @@ public class MainViewModel : INotifyPropertyChanged
         _vehicleExitTimer = null;
         _recenterHotkeyWatcher?.Dispose();
         _vehicleToggleHotkeyWatcher?.Dispose();
+        _calibrateHotkeyWatcher?.Dispose();
         _recenterHotkeyWatcher = null;
         _vehicleToggleHotkeyWatcher = null;
+        _calibrateHotkeyWatcher = null;
         if (_mutedProcessName is not null)
         {
             _sessionMuter.Unmute(_mutedProcessName);
