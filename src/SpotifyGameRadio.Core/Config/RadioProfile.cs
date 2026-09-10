@@ -32,6 +32,8 @@ public class RadioProfile : INotifyPropertyChanged
     private FreelookHotkey _vehicleToggleHotkey = new() { VirtualKeyCode = 0 };
     private float _vehicleExitDelaySeconds = 3.0f;
     private bool _autoMuteSource = false;
+    private FreelookHotkey _calibrateHotkey = new() { VirtualKeyCode = 0 };
+    private float _measuredYawSweepCounts = 0f;
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -102,6 +104,15 @@ public class RadioProfile : INotifyPropertyChanged
     /// as an opt-in rather than removed because a future release may route the
     /// mute through a mechanism that doesn't intersect the capture path.
     public bool AutoMuteSource { get => _autoMuteSource; set => SetField(ref _autoMuteSource, value); }
+
+    /// Global tap hotkey used to mark a view limit during freelook
+    /// calibration. VirtualKeyCode 0 means unbound.
+    public FreelookHotkey CalibrateHotkey { get => _calibrateHotkey; set => SetField(ref _calibrateHotkey, value); }
+
+    /// Mouse counts from centre to a view limit, captured by calibration.
+    /// 0 means "never calibrated". When > 0, MainViewModel re-derives
+    /// MouseSensitivity from it whenever MaxYawDegrees changes.
+    public float MeasuredYawSweepCounts { get => _measuredYawSweepCounts; set => SetField(ref _measuredYawSweepCounts, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

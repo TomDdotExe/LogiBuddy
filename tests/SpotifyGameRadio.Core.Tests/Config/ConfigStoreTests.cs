@@ -40,6 +40,8 @@ public class ConfigStoreTests
                 SpringBackRatePerSecond = 500f,
                 AutoRouteSource = false,
                 RouteSourceToDeviceId = "device-cable-1",
+                CalibrateHotkey = new FreelookHotkey { VirtualKeyCode = 0x4F },
+                MeasuredYawSweepCounts = 3600f,
             };
 
             store.Save(profile);
@@ -52,6 +54,8 @@ public class ConfigStoreTests
             Assert.Equal(profile.SpringBackRatePerSecond, loaded.SpringBackRatePerSecond);
             Assert.False(loaded.AutoRouteSource);
             Assert.Equal("device-cable-1", loaded.RouteSourceToDeviceId);
+            Assert.Equal(0x4F, loaded.CalibrateHotkey.VirtualKeyCode);
+            Assert.Equal(3600f, loaded.MeasuredYawSweepCounts);
         }
         finally
         {
@@ -122,6 +126,8 @@ public class ConfigStoreTests
             Assert.Equal(0, loaded.VehicleToggleHotkey.VirtualKeyCode); // default retained (unbound)
             Assert.Equal(3.0f, loaded.VehicleExitDelaySeconds);         // default retained
             Assert.False(loaded.AutoMuteSource);                        // default retained
+            Assert.Equal(0, loaded.CalibrateHotkey.VirtualKeyCode);     // default retained (unbound)
+            Assert.Equal(0f, loaded.MeasuredYawSweepCounts);            // default retained
         }
         finally
         {

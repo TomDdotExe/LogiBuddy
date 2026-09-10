@@ -44,4 +44,27 @@ public class RadioProfileTests
 
         Assert.Contains(nameof(RadioProfile.Hotkey), changed);
     }
+
+    [Fact]
+    public void NewCalibrationFields_HaveExpectedDefaults()
+    {
+        var profile = new RadioProfile();
+
+        Assert.Equal(0, profile.CalibrateHotkey.VirtualKeyCode); // unbound
+        Assert.Equal(0f, profile.MeasuredYawSweepCounts);
+    }
+
+    [Fact]
+    public void AssigningCalibrateHotkey_RaisesPropertyChanged()
+    {
+        var profile = new RadioProfile();
+        var changed = new List<string?>();
+        profile.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        profile.CalibrateHotkey = new FreelookHotkey { VirtualKeyCode = 0x4F };
+        profile.MeasuredYawSweepCounts = 3200f;
+
+        Assert.Contains(nameof(RadioProfile.CalibrateHotkey), changed);
+        Assert.Contains(nameof(RadioProfile.MeasuredYawSweepCounts), changed);
+    }
 }
