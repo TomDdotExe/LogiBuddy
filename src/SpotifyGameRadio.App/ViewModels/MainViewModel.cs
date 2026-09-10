@@ -28,6 +28,9 @@ public class MainViewModel : INotifyPropertyChanged
     private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
     private bool _isInVehicle = true;
     private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
+    private CalibrationSession? _calibrationSession;
+    private TapHotkeyWatcher? _calibrateMarkWatcher;
+    private readonly CalibrationCuePlayer _cuePlayer = new();
 
     private static readonly HashSet<string> LiveProfileProperties = new()
     {
@@ -134,6 +137,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand LoadProfileCommand { get; }
     public ICommand ResetSourceRoutingCommand { get; }
     public ICommand RecenterCommand { get; }
+    public ICommand CalibrateFreelookCommand { get; }
 
     public MainViewModel()
     {
@@ -149,6 +153,13 @@ public class MainViewModel : INotifyPropertyChanged
         LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
         ResetSourceRoutingCommand = new RelayCommand(_ => ResetSourceRouting());
         RecenterCommand = new RelayCommand(_ => Recenter());
+        CalibrateFreelookCommand = new RelayCommand(
+            _ => StartOrAbortCalibration(),
+            _ => _pipeline is not null
+                 && _mouseHook is not null
+                 && Profile.Hotkey.VirtualKeyCode != 0
+                 && Profile.CalibrateHotkey.VirtualKeyCode != 0
+                 && Profile.CalibrateHotkey.VirtualKeyCode != Profile.Hotkey.VirtualKeyCode);
 
         RefreshSources();
         Profile.PropertyChanged += OnProfilePropertyChanged;
@@ -177,6 +188,16 @@ public class MainViewModel : INotifyPropertyChanged
     {
         if (e.PropertyName is null) return;
 
+        // Keep a calibrated MouseSensitivity in step with MaxYawDegrees,
+        // whether running or not. Setting MouseSensitivity re-enters this
+        // handler under a different property name (no further recursion) and,
+        // when running, is pushed to the pipeline by the branch below.
+        if (e.PropertyName == nameof(RadioProfile.MaxYawDegrees)
+            && Profile.MeasuredYawSweepCounts > 0f)
+        {
+            Profile.MouseSensitivity = Profile.MaxYawDegrees / Profile.MeasuredYawSweepCounts;
+        }
+
         if (LiveProfileProperties.Contains(e.PropertyName))
         {
             if (_pipeline is null) return;
@@ -202,6 +223,10 @@ public class MainViewModel : INotifyPropertyChanged
         else if (e.PropertyName == nameof(RadioProfile.VehicleToggleHotkey))
         {
             _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.CalibrateHotkey))
+        {
+            _calibrateMarkWatcher?.SetHotkey(Profile.CalibrateHotkey);
         }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
@@ -236,6 +261,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     private void LoadProfile(string name)
     {
+        if (_calibrationSession is not null)
+        {
+            _calibrationSession.Abort();
+            TeardownCalibration();
+        }
         Profile.PropertyChanged -= OnProfilePropertyChanged;
         Profile = _configStore.Load(name);
         Profile.PropertyChanged += OnProfilePropertyChanged;
@@ -461,6 +491,60 @@ public class MainViewModel : INotifyPropertyChanged
         ListenerPitch = 0;
     }
 
+    /// Entry point for the "Calibrate freelook" button. Starts a
+    /// CalibrationSession over the live mouse hook, or aborts one already
+    /// running (the button doubles as Cancel). Only reachable while the
+    /// pipeline is running — see CalibrateFreelookCommand.CanExecute.
+    private void StartOrAbortCalibration()
+    {
+        if (_calibrationSession is not null)
+        {
+            _calibrationSession.Abort(); // the Ended handler tears down
+            return;
+        }
+        if (_pipeline is null || _mouseHook is null) return;
+
+        Recenter();
+
+        var session = new CalibrationSession(_mouseHook);
+        var markWatcher = new TapHotkeyWatcher(Profile.CalibrateHotkey, new Win32KeyStateSource());
+        markWatcher.Pressed += () =>
+            Application.Current?.Dispatcher.Invoke(() => _calibrationSession?.Mark());
+
+        session.StepChanged += (step, message) => Application.Current?.Dispatcher.Invoke(() =>
+        {
+            StatusMessage = message;
+            if (step == CalibrationStep.AwaitRightLimit) _cuePlayer.Captured();
+        });
+        session.Completed += result => Application.Current?.Dispatcher.Invoke(() =>
+        {
+            Profile.MeasuredYawSweepCounts = result.MeasuredHalfSweepCounts;
+            Profile.MouseSensitivity = Profile.MaxYawDegrees / result.MeasuredHalfSweepCounts;
+            _cuePlayer.Done();
+            StatusMessage =
+                $"Calibration done — mouse sensitivity set to {Profile.MouseSensitivity:0.####}. Click Save Profile to keep it.";
+            TeardownCalibration();
+        });
+        session.Ended += reason => Application.Current?.Dispatcher.Invoke(() =>
+        {
+            StatusMessage = reason;
+            _cuePlayer.Failed();
+            TeardownCalibration();
+        });
+
+        _calibrationSession = session;
+        _calibrateMarkWatcher = markWatcher;
+        session.Start();
+    }
+
+    private void TeardownCalibration()
+    {
+        _calibrateMarkWatcher?.Dispose();
+        _calibrateMarkWatcher = null;
+        _calibrationSession?.Dispose();
+        _calibrationSession = null;
+    }
+
     private void Start()
     {
         // The construction sequence below touches real hardware (audio
@@ -654,6 +738,11 @@ public class MainViewModel : INotifyPropertyChanged
     /// Safe when nothing is running — every member touched is null-guarded.
     public void Stop()
     {
+        if (_calibrationSession is not null)
+        {
+            _calibrationSession.Abort();
+            TeardownCalibration();
+        }
         _pipeline?.Stop();
         // Dispose after Stop: releases the spatializers' native resources
         // (Steam Audio HRTF context/effect), which would otherwise leak on
@@ -690,6 +779,12 @@ public class MainViewModel : INotifyPropertyChanged
     {
         _testTone?.Dispose();
         _testTone = null;
+        if (_calibrationSession is not null)
+        {
+            _calibrationSession.Abort();
+            TeardownCalibration();
+        }
+        _cuePlayer.Dispose();
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
