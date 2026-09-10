@@ -24,3 +24,15 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+
+# Release packaging
+build/.cache/
+build/.staging/
+build/dist/
+build/third-party/
+
+# Fetched native binary (see build/fetch-phonon.ps1)
+src/SpotifyGameRadio.App/runtimes/
+
+# Claude Code local state
+.claude/

@@ -7,18 +7,16 @@
   (driver quirks) — the first failed Start silently switches to
   whole-device capture and shows a one-line notice.
 - .NET 8 SDK.
-- `phonon.dll` (Steam Audio native library) placed at
-  `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`. Steam
-  Audio is Valve's open-source spatial audio SDK (MIT licensed); grab a
-  Windows release from
-  <https://github.com/ValveSoftware/steam-audio/releases> — use version
-  4.5.x or later, since this project's native struct layouts were
-  written against the phonon 4.x API. Unzip it, find `phonon.dll` under
-  `bin/windows-x64/` (older archives may name that folder slightly
-  differently — take the 64-bit Windows one), and copy that single file
-  to the path above, creating the folders if they don't exist. Without
-  it, the app still runs but falls back to simple stereo panning
-  instead of true HRTF.
+- `phonon.dll` (Steam Audio's native HRTF library, MIT licensed):
+  - **End users:** it is already bundled in the release ZIP, next to the
+    `.exe` — nothing to do.
+  - **Developers:** run `./build/fetch-phonon.ps1` once. It downloads the
+    pinned Steam Audio 4.8.1 release, verifies its checksum, and places
+    the DLL at
+    `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`.
+  Without the DLL the app still runs but falls back to simple stereo
+  panning instead of true HRTF. The 4.x API is required — the project's
+  native struct layouts were written against it.
 - No sample-rate setup is needed. The DSP chain, HRTF spatializer, and
   output renderer all run at 48kHz; per-process capture always delivers
   that, and the `WasapiDeviceLoopbackCapture` fallback (used on pre-20H1
