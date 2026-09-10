@@ -58,7 +58,10 @@ window slider is removed (see Window).
 
 `src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs`.
 
-State to add: `bool _wasHotkeyHeld;` and `float _idleSeconds;`.
+State to add: `float _idleSeconds;`. (An earlier draft tracked a
+`_wasHotkeyHeld` edge; implementation simplified to "force forward on
+*any* released `Update`" — idempotent, and robust if the key is released
+before the first `Update`.)
 
 **`OnMouseMoved(dx, dy)`** — unchanged accumulation and per-axis clamp,
 then:

@@ -58,16 +58,53 @@ public class FreelookTrackerTests
     }
 
     [Fact]
-    public void Update_WhileHotkeyReleased_SpringsBackTowardZero()
+    public void Update_OnHotkeyRelease_SnapsToForwardImmediately()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, MakeProfile());
-        input.RaiseMove(dx: 100, dy: 0); // yaw = 10 degrees
+        input.RaiseMove(dx: 100, dy: 40); // yaw 10, pitch 4
+        tracker.Update(0.05f);            // still held
+        Assert.Equal(10f, tracker.YawDegrees, precision: 3);
+
         input.IsHotkeyHeld = false;
+        tracker.Update(0.001f);
 
-        tracker.Update(deltaSeconds: 0.05f); // springs back 100deg/s * 0.05s = 5 degrees
+        Assert.Equal(0f, tracker.YawDegrees, precision: 3);
+        Assert.Equal(0f, tracker.PitchDegrees, precision: 3);
+    }
 
-        Assert.Equal(5f, tracker.YawDegrees, precision: 2);
+    [Fact]
+    public void OffAxisClamp_LimitsCombinedAngle_PreservingRatio()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        var profile = MakeProfile();
+        profile.MaxYawDegrees = 90f;
+        profile.MaxPitchDegrees = 90f;
+        profile.MeasuredMaxOffAxisDegrees = 50f;
+        var tracker = new FreelookTracker(input, profile);
+
+        input.RaiseMove(dx: 400, dy: 400); // raw yaw 40, pitch 40, combined ~56.57
+
+        float combined = MathF.Sqrt(
+            tracker.YawDegrees * tracker.YawDegrees + tracker.PitchDegrees * tracker.PitchDegrees);
+        Assert.Equal(50f, combined, precision: 1);
+        Assert.Equal(tracker.YawDegrees, tracker.PitchDegrees, precision: 2); // ratio preserved
+    }
+
+    [Fact]
+    public void OffAxisClamp_Disabled_WhenMeasuredMaxIsZero()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        var profile = MakeProfile();
+        profile.MaxYawDegrees = 90f;
+        profile.MaxPitchDegrees = 90f;
+        profile.MeasuredMaxOffAxisDegrees = 0f;
+        var tracker = new FreelookTracker(input, profile);
+
+        input.RaiseMove(dx: 400, dy: 400); // yaw 40, pitch 40
+
+        Assert.Equal(40f, tracker.YawDegrees, precision: 3);
+        Assert.Equal(40f, tracker.PitchDegrees, precision: 3);
     }
 
     [Fact]
@@ -85,17 +122,45 @@ public class FreelookTrackerTests
     }
 
     [Fact]
-    public void AlwaysOn_UpdateDoesNotSpringBack()
+    public void AlwaysOn_Update_DoesNotEaseUntilMouseIdleOneSecond()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = false };
         var profile = MakeProfile();
         profile.FreelookAlwaysOn = true;
         var tracker = new FreelookTracker(input, profile);
-        input.RaiseMove(dx: 100, dy: 0); // yaw = 10
+        input.RaiseMove(dx: 100, dy: 0); // yaw 10
 
-        tracker.Update(deltaSeconds: 1f);
+        for (int i = 0; i < 9; i++) tracker.Update(0.1f); // 0.9s idle
 
         Assert.Equal(10f, tracker.YawDegrees, precision: 3);
+    }
+
+    [Fact]
+    public void AlwaysOn_Update_EasesTowardZeroAfterOneSecondIdle()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = false };
+        var profile = MakeProfile();       // SpringBackRatePerSecond = 100
+        profile.FreelookAlwaysOn = true;
+        var tracker = new FreelookTracker(input, profile);
+        input.RaiseMove(dx: 100, dy: 0);   // yaw 10
+
+        for (int i = 0; i < 30; i++) tracker.Update(0.1f); // 3s: 1s wait + ample ease
+
+        Assert.Equal(0f, tracker.YawDegrees, precision: 3);
+    }
+
+    [Fact]
+    public void AlwaysOn_MouseMovement_ResetsTheIdleTimer()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = false };
+        var profile = MakeProfile();
+        profile.FreelookAlwaysOn = true;
+        var tracker = new FreelookTracker(input, profile);
+        input.RaiseMove(dx: 100, dy: 0); // yaw 10
+
+        for (int i = 0; i < 9; i++) { tracker.Update(0.1f); input.RaiseMove(0, 0); }
+
+        Assert.Equal(10f, tracker.YawDegrees, precision: 3); // idle never reached 1s
     }
 
     [Fact]
