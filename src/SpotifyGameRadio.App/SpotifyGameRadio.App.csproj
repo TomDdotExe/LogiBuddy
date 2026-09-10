@@ -16,6 +16,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <Version>0.1.0</Version>
+    <!-- Ship a clean end-user exe name (SpotifyGameRadio.exe, not
+         SpotifyGameRadio.App.exe). Nothing derives paths from the
+         assembly name. -->
+    <AssemblyName>SpotifyGameRadio</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
