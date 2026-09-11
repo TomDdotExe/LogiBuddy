@@ -3,23 +3,29 @@ using Timer = System.Timers.Timer;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-public enum CalibrationStep { Idle, AwaitRightMark, AwaitLeftMark, Completed, Failed, Aborted }
+public enum CalibrationStep { Idle, AwaitRightMark, AwaitLeftMark, AwaitUpMark, AwaitDownMark, Completed, Failed, Aborted }
 
-/// SweepCounts is the mouse-count magnitude measured across a known 180°
-/// yaw rotation (right mark to left mark).
-public sealed record CalibrationResult(float SweepCounts);
+/// YawSweepCounts / PitchSweepCounts are mouse-count magnitudes each measured
+/// across a known 180° rotation (right mark to left mark; up mark to down
+/// mark), so MouseSensitivity/PitchSensitivity = 180 / SweepCounts.
+public sealed record CalibrationResult(float YawSweepCounts, float PitchSweepCounts);
 
 /// Guided freelook calibration. Subscribes to a live mouse input source and
-/// sums horizontal counts whenever a step is active — it does NOT require
-/// the freelook key to be held, so it works with hold-to-look, toggle, and
-/// always-on freelook alike. Two marks after Start():
-///   right mark — the user turns 90° right of centre and marks
-///   left mark  — the user turns 180° back the other way (through centre,
-///                to 90° left of it) and marks
-/// The count magnitude between the two marks corresponds to exactly 180° of
-/// real rotation regardless of the game's actual view limits, so the view
-/// model can derive MouseSensitivity directly (180 / SweepCounts) without
-/// needing to find a hard stop.
+/// sums counts on the relevant axis whenever a step is active — it does NOT
+/// require the freelook key to be held, so it works with hold-to-look,
+/// toggle, and always-on freelook alike. Four marks after Start(), two
+/// independent phases:
+///   yaw:   right mark (turn 90° right of centre) then left mark (turn 180°
+///          back through centre, to 90° left of it)
+///   pitch: up mark (look straight up until the view stops) then down mark
+///          (look straight down until the view stops) — unlike yaw, most
+///          games do hard-clamp vertical look, so the view's actual limit is
+///          a reliable, easy-to-find reference here.
+/// Each phase's count magnitude corresponds to exactly 180° of real rotation
+/// regardless of the game's actual yaw limit, so the view model can derive
+/// MouseSensitivity / PitchSensitivity directly (180 / SweepCounts) without
+/// needing to find a yaw hard stop, and without mixing the two axes into one
+/// ambiguous "corner" measurement.
 public sealed class CalibrationSession : IDisposable
 {
     private const long MinValidSweepCounts = 50;
@@ -29,6 +35,8 @@ public sealed class CalibrationSession : IDisposable
     private readonly object _gate = new();
 
     private long _accumX;
+    private long _accumY;
+    private float _yawSweep;
     private bool _disposed;
 
     public CalibrationStep Step { get; private set; } = CalibrationStep.Idle;
@@ -52,12 +60,15 @@ public sealed class CalibrationSession : IDisposable
     }
 
     private bool IsActive => Step is CalibrationStep.AwaitRightMark
-        or CalibrationStep.AwaitLeftMark;
+        or CalibrationStep.AwaitLeftMark
+        or CalibrationStep.AwaitUpMark
+        or CalibrationStep.AwaitDownMark;
 
     private void OnMouseMoved(int dx, int dy)
     {
         if (!IsActive) return;
         Interlocked.Add(ref _accumX, dx);
+        Interlocked.Add(ref _accumY, dy);
     }
 
     public void Start() => Raise(() =>
@@ -89,18 +100,44 @@ public sealed class CalibrationSession : IDisposable
                         (CalibrationResult?)null);
 
                 case CalibrationStep.AwaitLeftMark:
-                    _idleTimer.Stop();
-                    long sweep = Math.Abs(Interlocked.Read(ref _accumX));
-                    if (sweep < MinValidSweepCounts)
+                    long yawSweep = Math.Abs(Interlocked.Read(ref _accumX));
+                    if (yawSweep < MinValidSweepCounts)
                     {
+                        _idleTimer.Stop();
                         Step = CalibrationStep.Failed;
                         return (Step,
                             "That didn't register as a full 180 degree turn. Try again.",
                             (CalibrationResult?)null);
                     }
+                    _yawSweep = yawSweep;
+                    Interlocked.Exchange(ref _accumY, 0); // reference for the vertical 180-turn
+                    Step = CalibrationStep.AwaitUpMark;
+                    RestartTimer();
+                    return (Step,
+                        "Yaw set. Now look straight up until the view stops, then tap Mark.",
+                        (CalibrationResult?)null);
+
+                case CalibrationStep.AwaitUpMark:
+                    Interlocked.Exchange(ref _accumY, 0); // this instant is the reference for the vertical 180-turn
+                    Step = CalibrationStep.AwaitDownMark;
+                    RestartTimer();
+                    return (Step,
+                        "Now look straight down until the view stops, then tap Mark.",
+                        (CalibrationResult?)null);
+
+                case CalibrationStep.AwaitDownMark:
+                    _idleTimer.Stop();
+                    long pitchSweep = Math.Abs(Interlocked.Read(ref _accumY));
+                    if (pitchSweep < MinValidSweepCounts)
+                    {
+                        Step = CalibrationStep.Failed;
+                        return (Step,
+                            "That didn't register as a full up-to-down turn. Try again.",
+                            (CalibrationResult?)null);
+                    }
                     Step = CalibrationStep.Completed;
-                    return (Step, "Left mark set. Calibration complete.",
-                        new CalibrationResult(sweep));
+                    return (Step, "Down mark set. Calibration complete.",
+                        new CalibrationResult(_yawSweep, pitchSweep));
 
                 default:
                     return null;

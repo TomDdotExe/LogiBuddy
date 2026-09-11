@@ -16,11 +16,27 @@ public class FreelookTrackerTests
 {
     private static RadioProfile MakeProfile() => new()
     {
-        MouseSensitivity = 0.1f, // degrees per mouse count
+        MouseSensitivity = 0.1f, // degrees per mouse count, yaw
+        PitchSensitivity = 0.1f, // degrees per mouse count, pitch
         MaxYawDegrees = 90f,
         MaxPitchDegrees = 60f,
         SpringBackRatePerSecond = 100f
     };
+
+    [Fact]
+    public void Pitch_UsesPitchSensitivity_IndependentlyFromYaw()
+    {
+        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        var profile = MakeProfile();
+        profile.MouseSensitivity = 0.1f;
+        profile.PitchSensitivity = 0.4f;
+        var tracker = new FreelookTracker(input, profile);
+
+        input.RaiseMove(dx: 50, dy: 20);
+
+        Assert.Equal(5f, tracker.YawDegrees, precision: 3);   // 50 * 0.1 (MouseSensitivity)
+        Assert.Equal(8f, tracker.PitchDegrees, precision: 3); // 20 * 0.4 (PitchSensitivity)
+    }
 
     [Fact]
     public void MouseMove_WhileHotkeyHeld_AccumulatesYawAndPitch()

@@ -39,7 +39,7 @@ public class FreelookTracker
         if (!_profile.FreelookAlwaysOn && !_inputSource.IsHotkeyHeld) return;
 
         YawDegrees = Clamp(YawDegrees + deltaX * _profile.MouseSensitivity, _profile.MaxYawDegrees);
-        PitchDegrees = Clamp(PitchDegrees + deltaY * _profile.MouseSensitivity, _profile.MaxPitchDegrees);
+        PitchDegrees = Clamp(PitchDegrees + deltaY * _profile.PitchSensitivity, _profile.MaxPitchDegrees);
         ApplyOffAxisClamp();
     }
 

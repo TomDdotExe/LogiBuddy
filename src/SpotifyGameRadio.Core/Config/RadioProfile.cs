@@ -19,7 +19,8 @@ public class RadioProfile : INotifyPropertyChanged
     private float _noiseLevel = 0.05f;
     private float _wetDryMix = 1.0f;
     private FreelookHotkey _hotkey = new();
-    private float _mouseSensitivity = 0.15f; // degrees per mouse count
+    private float _mouseSensitivity = 0.15f; // degrees per mouse count, yaw
+    private float _pitchSensitivity = 0.15f; // degrees per mouse count, pitch
     private float _maxYawDegrees = 90f;
     private float _maxPitchDegrees = 60f;
     private float _springBackRatePerSecond = 720f;
@@ -55,6 +56,11 @@ public class RadioProfile : INotifyPropertyChanged
 
     public FreelookHotkey Hotkey { get => _hotkey; set => SetField(ref _hotkey, value); }
     public float MouseSensitivity { get => _mouseSensitivity; set => SetField(ref _mouseSensitivity, value); }
+
+    /// Degrees per mouse count for pitch, calibrated independently from
+    /// MouseSensitivity (yaw) since games commonly use a different vertical
+    /// response than horizontal.
+    public float PitchSensitivity { get => _pitchSensitivity; set => SetField(ref _pitchSensitivity, value); }
     public float MaxYawDegrees { get => _maxYawDegrees; set => SetField(ref _maxYawDegrees, value); }
     public float MaxPitchDegrees { get => _maxPitchDegrees; set => SetField(ref _maxPitchDegrees, value); }
     public float SpringBackRatePerSecond { get => _springBackRatePerSecond; set => SetField(ref _springBackRatePerSecond, value); }

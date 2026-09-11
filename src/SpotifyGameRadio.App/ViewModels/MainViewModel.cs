@@ -541,12 +541,15 @@ public class MainViewModel : INotifyPropertyChanged
         });
         session.Completed += result => Application.Current?.Dispatcher.Invoke(() =>
         {
-            float sens = 180f / result.SweepCounts;
-            Profile.MouseSensitivity = sens;
+            float yawSens = 180f / result.YawSweepCounts;
+            float pitchSens = 180f / result.PitchSweepCounts;
+            Profile.MouseSensitivity = yawSens;
+            Profile.PitchSensitivity = pitchSens;
 
-            _announcer.Say("Left mark set. Calibration complete.");
+            _announcer.Say("Down mark set. Calibration complete.");
             StatusMessage =
-                $"Calibration complete — sensitivity {sens:0.####}. Click Save Profile to keep it.";
+                $"Calibration complete — yaw sensitivity {yawSens:0.####}, pitch sensitivity {pitchSens:0.####}. " +
+                "Click Save Profile to keep it.";
             TeardownCalibration();
         });
         session.Ended += reason => Application.Current?.Dispatcher.Invoke(() =>
@@ -573,6 +576,8 @@ public class MainViewModel : INotifyPropertyChanged
     {
         CalibrationStep.AwaitRightMark => "Calibration started. Face forward, then turn 90 degrees right and tap.",
         CalibrationStep.AwaitLeftMark => "Right mark set. Now turn 180 degrees left, past centre, and tap.",
+        CalibrationStep.AwaitUpMark => "Yaw set. Now look straight up until the view stops, and tap.",
+        CalibrationStep.AwaitDownMark => "Up mark set. Now look straight down until the view stops, and tap.",
         _ => "",
     };
 

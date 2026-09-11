@@ -288,7 +288,7 @@ public class RadioPipelineTests
     {
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
-        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, PitchSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
         var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, profile);
         var effectChain = new RadioEffectChain(48000f);
