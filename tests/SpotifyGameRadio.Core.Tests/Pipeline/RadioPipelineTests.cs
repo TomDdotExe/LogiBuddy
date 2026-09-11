@@ -284,11 +284,11 @@ public class RadioPipelineTests
     }
 
     [Fact]
-    public void ListenerYawAndPitch_ReflectTheTrackerAfterFreelookInput()
+    public void ListenerYaw_ReflectsTheTrackerAfterFreelookInput_PitchStaysZero()
     {
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
-        var profile = new RadioProfile { MouseSensitivity = 0.1f, PitchSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
         var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, profile);
         var effectChain = new RadioEffectChain(48000f);
@@ -300,7 +300,7 @@ public class RadioPipelineTests
         input.RaiseMove(dx: 300, dy: 100);
 
         Assert.Equal(30f, pipeline.ListenerYawDegrees, precision: 3);   // 300 * 0.1
-        Assert.Equal(10f, pipeline.ListenerPitchDegrees, precision: 3); // 100 * 0.1
+        Assert.Equal(0f, pipeline.ListenerPitchDegrees);                // vertical panning disabled
     }
 
     [Fact]

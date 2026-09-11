@@ -156,13 +156,14 @@
         <StackPanel Grid.Row="18" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Max pitch (°):" VerticalAlignment="Center" Width="140" />
             <Slider Minimum="0" Maximum="90" Width="200" Value="{Binding Profile.MaxPitchDegrees}" />
+            <TextBlock Text=" currently unused — vertical panning is disabled" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="Gray" />
         </StackPanel>
 
         <StackPanel Grid.Row="19" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Calibrate hotkey:" VerticalAlignment="Center" Width="140" />
             <controls:HotkeyCaptureControl Hotkey="{Binding Profile.CalibrateHotkey, Mode=TwoWay}" />
             <Button Content="Calibrate freelook" Command="{Binding CalibrateFreelookCommand}" Margin="8,0,0,0"
-                    ToolTip="While running: face forward, turn 90 degrees right and tap the calibrate hotkey, then turn 180 degrees left (past where you started) and tap again. Then look straight up until the view stops and tap, then straight down until it stops and tap. Sets yaw and pitch sensitivity to match the game's turn rate. Click again to cancel." />
+                    ToolTip="While running: face forward, turn right until the view stops, then tap the calibrate hotkey. Sets mouse sensitivity using the Max yaw slider above as the reference angle — set that to roughly match your game's actual turn limit first. Click again to cancel. (Vertical/pitch panning is disabled for now.)" />
             <TextBlock Text=" run while playing; needs a freelook key too" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="Gray" />
         </StackPanel>
 

@@ -24,22 +24,7 @@ public class FreelookTrackerTests
     };
 
     [Fact]
-    public void Pitch_UsesPitchSensitivity_IndependentlyFromYaw()
-    {
-        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
-        var profile = MakeProfile();
-        profile.MouseSensitivity = 0.1f;
-        profile.PitchSensitivity = 0.4f;
-        var tracker = new FreelookTracker(input, profile);
-
-        input.RaiseMove(dx: 50, dy: 20);
-
-        Assert.Equal(5f, tracker.YawDegrees, precision: 3);   // 50 * 0.1 (MouseSensitivity)
-        Assert.Equal(8f, tracker.PitchDegrees, precision: 3); // 20 * 0.4 (PitchSensitivity)
-    }
-
-    [Fact]
-    public void MouseMove_WhileHotkeyHeld_AccumulatesYawAndPitch()
+    public void MouseMove_WhileHotkeyHeld_AccumulatesYaw_IgnoresPitch()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, MakeProfile());
@@ -47,7 +32,7 @@ public class FreelookTrackerTests
         input.RaiseMove(dx: 50, dy: 20);
 
         Assert.Equal(5f, tracker.YawDegrees, precision: 3);   // 50 * 0.1
-        Assert.Equal(2f, tracker.PitchDegrees, precision: 3); // 20 * 0.1
+        Assert.Equal(0f, tracker.PitchDegrees);               // vertical panning disabled
     }
 
     [Fact]
@@ -78,7 +63,7 @@ public class FreelookTrackerTests
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, MakeProfile());
-        input.RaiseMove(dx: 100, dy: 40); // yaw 10, pitch 4
+        input.RaiseMove(dx: 100, dy: 40); // yaw 10; dy ignored (pitch disabled)
         tracker.Update(0.05f);            // still held
         Assert.Equal(10f, tracker.YawDegrees, precision: 3);
 
@@ -90,21 +75,21 @@ public class FreelookTrackerTests
     }
 
     [Fact]
-    public void OffAxisClamp_LimitsCombinedAngle_PreservingRatio()
+    public void OffAxisClamp_LimitsYaw_WithPitchAlwaysZero()
     {
+        // Pitch is disabled (always 0), so the combined-angle formula
+        // degenerates to a plain yaw clamp here — still exercises the
+        // (currently unreachable from the UI) off-axis clamp method.
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var profile = MakeProfile();
         profile.MaxYawDegrees = 90f;
-        profile.MaxPitchDegrees = 90f;
         profile.MeasuredMaxOffAxisDegrees = 50f;
         var tracker = new FreelookTracker(input, profile);
 
-        input.RaiseMove(dx: 400, dy: 400); // raw yaw 40, pitch 40, combined ~56.57
+        input.RaiseMove(dx: 600, dy: 400); // raw yaw 60; dy ignored
 
-        float combined = MathF.Sqrt(
-            tracker.YawDegrees * tracker.YawDegrees + tracker.PitchDegrees * tracker.PitchDegrees);
-        Assert.Equal(50f, combined, precision: 1);
-        Assert.Equal(tracker.YawDegrees, tracker.PitchDegrees, precision: 2); // ratio preserved
+        Assert.Equal(50f, tracker.YawDegrees, precision: 1);
+        Assert.Equal(0f, tracker.PitchDegrees);
     }
 
     [Fact]
@@ -113,14 +98,13 @@ public class FreelookTrackerTests
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var profile = MakeProfile();
         profile.MaxYawDegrees = 90f;
-        profile.MaxPitchDegrees = 90f;
         profile.MeasuredMaxOffAxisDegrees = 0f;
         var tracker = new FreelookTracker(input, profile);
 
-        input.RaiseMove(dx: 400, dy: 400); // yaw 40, pitch 40
+        input.RaiseMove(dx: 400, dy: 400); // yaw 40; dy ignored
 
         Assert.Equal(40f, tracker.YawDegrees, precision: 3);
-        Assert.Equal(40f, tracker.PitchDegrees, precision: 3);
+        Assert.Equal(0f, tracker.PitchDegrees);
     }
 
     [Fact]
@@ -134,7 +118,7 @@ public class FreelookTrackerTests
         input.RaiseMove(dx: 50, dy: 20);
 
         Assert.Equal(5f, tracker.YawDegrees, precision: 3);
-        Assert.Equal(2f, tracker.PitchDegrees, precision: 3);
+        Assert.Equal(0f, tracker.PitchDegrees);
     }
 
     [Fact]
@@ -180,7 +164,7 @@ public class FreelookTrackerTests
     }
 
     [Fact]
-    public void Recenter_ZeroesYawAndPitch()
+    public void Recenter_ZeroesYaw()
     {
         var input = new FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, MakeProfile());

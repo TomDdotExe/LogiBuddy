@@ -24,22 +24,22 @@ public class FreelookTracker
     }
 
     /// Zeroes the listener orientation (faces forward again). Called from the UI
-    /// thread; the audio thread's per-block read of YawDegrees/PitchDegrees is
-    /// two atomic float reads, so the worst case is one block with one axis
-    /// already zeroed and the other not — inaudible.
+    /// thread; the audio thread's per-block read of YawDegrees is an atomic
+    /// float read.
     public void Recenter()
     {
         YawDegrees = 0f;
-        PitchDegrees = 0f;
     }
 
+    /// deltaY (pitch) is intentionally ignored: vertical panning is disabled
+    /// for now, since calibrating each game's actual vertical movable radius
+    /// isn't solved yet. PitchDegrees stays permanently 0.
     private void OnMouseMoved(int deltaX, int deltaY)
     {
         _idleSeconds = 0f;
         if (!_profile.FreelookAlwaysOn && !_inputSource.IsHotkeyHeld) return;
 
         YawDegrees = Clamp(YawDegrees + deltaX * _profile.MouseSensitivity, _profile.MaxYawDegrees);
-        PitchDegrees = Clamp(PitchDegrees + deltaY * _profile.PitchSensitivity, _profile.MaxPitchDegrees);
         ApplyOffAxisClamp();
     }
 
@@ -70,7 +70,6 @@ public class FreelookTracker
             if (!_inputSource.IsHotkeyHeld)
             {
                 YawDegrees = 0f;
-                PitchDegrees = 0f;
             }
             return;
         }
@@ -79,7 +78,6 @@ public class FreelookTracker
         if (_idleSeconds < 1.0f) return;
         float step = _profile.SpringBackRatePerSecond * deltaSeconds;
         YawDegrees = SpringTowardZero(YawDegrees, step);
-        PitchDegrees = SpringTowardZero(PitchDegrees, step);
     }
 
     private static float Clamp(float value, float max) => Math.Clamp(value, -max, max);
