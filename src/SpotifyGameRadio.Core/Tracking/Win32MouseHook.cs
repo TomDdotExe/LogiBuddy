@@ -3,95 +3,247 @@ using SpotifyGameRadio.Core.Config;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-/// Global low-level mouse hook + polled hotkey state. Does not read from or
-/// inject into any other process — same risk class as AutoHotkey.
+/// Global relative mouse-delta capture via Windows Raw Input, plus polled
+/// hotkey state. Raw Input reports true relative deltas straight from the
+/// mouse driver, unaffected by the OS cursor's on-screen position — unlike
+/// a low-level mouse hook diffing cursor coordinates, which silently drops
+/// movement once the (invisible) system cursor pins against a screen edge,
+/// exactly the case a large continuous freelook/calibration swipe hits.
+/// Does not read from or inject into any other process — same risk class
+/// as AutoHotkey.
 public class Win32MouseHook : IMouseInputSource, IDisposable
 {
-    private const int WH_MOUSE_LL = 14;
-    private const int WM_MOUSEMOVE = 0x0200;
+    private const uint WM_INPUT = 0x00FF;
+    private const uint WM_QUIT = 0x0012;
+    private const uint RID_INPUT = 0x10000003;
+    private const uint RIM_TYPEMOUSE = 0;
+    private const ushort MOUSE_MOVE_ABSOLUTE = 0x0001;
+    private const uint RIDEV_INPUTSINK = 0x00000100;
+    private const ushort HID_USAGE_PAGE_GENERIC = 0x01;
+    private const ushort HID_USAGE_GENERIC_MOUSE = 0x02;
+    private static readonly IntPtr HWND_MESSAGE = new(-3);
+    private const string WindowClassName = "SGR-RawInputWindow";
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MSLLHOOKSTRUCT
+    private struct MSG
     {
-        public POINT pt;
-        public uint mouseData;
-        public uint flags;
+        public IntPtr hwnd;
+        public uint message;
+        public IntPtr wParam;
+        public IntPtr lParam;
         public uint time;
-        public IntPtr dwExtraInfo;
+        public POINT pt;
     }
 
-    private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct WNDCLASSEX
+    {
+        public int cbSize;
+        public uint style;
+        public WndProc lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        [MarshalAs(UnmanagedType.LPTStr)] public string? lpszMenuName;
+        [MarshalAs(UnmanagedType.LPTStr)] public string? lpszClassName;
+        public IntPtr hIconSm;
+    }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTDEVICE
+    {
+        public ushort usUsagePage;
+        public ushort usUsage;
+        public uint dwFlags;
+        public IntPtr hwndTarget;
+    }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTHEADER
+    {
+        public uint dwType;
+        public uint dwSize;
+        public IntPtr hDevice;
+        public IntPtr wParam;
+    }
+
+    /// usButtonFlags/usButtonData (a nested struct in the real Win32 union)
+    /// collapse into ulButtons here; only lLastX/lLastY are used.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWMOUSE
+    {
+        public ushort usFlags;
+        public uint ulButtons;
+        public uint ulRawButtons;
+        public int lLastX;
+        public int lLastY;
+        public uint ulExtraInformation;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUT
+    {
+        public RAWINPUTHEADER header;
+        public RAWMOUSE mouse;
+    }
+
+    private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern ushort RegisterClassEx(ref WNDCLASSEX lpwcx);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(
+        uint dwExStyle, string lpClassName, string? lpWindowName, uint dwStyle,
+        int x, int y, int nWidth, int nHeight,
+        IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool UnregisterClass(string lpClassName, IntPtr hInstance);
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool RegisterRawInputDevices(RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetRawInputData(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+    private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-    private readonly LowLevelMouseProc _proc;
-    // Swapped live by SetHotkey; PollHotkeyState re-reads it every iteration.
+    private readonly WndProc _wndProc; // kept alive: native code holds a raw pointer to this delegate
     private volatile FreelookHotkey _hotkey;
-    private readonly Thread _hookThread;
+    private readonly Thread _messageThread;
     private readonly Thread _hotkeyPollThread;
-    private IntPtr _hookHandle = IntPtr.Zero;
-    private volatile bool _running = true;
-    private int _lastX, _lastY;
-    private bool _havePreviousPoint;
+    private uint _messageThreadId;
+    private volatile bool _pollRunning = true;
 
     public bool IsHotkeyHeld { get; private set; }
     public event Action<int, int>? MouseMoved;
 
-    /// Rebinds the freelook key without reinstalling the hook. The poll thread
-    /// reads the new value on its next iteration (~8 ms).
+    /// Rebinds the freelook key without reinstalling raw input registration.
+    /// The poll thread reads the new value on its next iteration (~8 ms).
     public void SetHotkey(FreelookHotkey hotkey) => _hotkey = hotkey;
 
-    /// Thrown if the low-level hook could not be installed (e.g. blocked by policy/AV).
+    /// Thrown if the raw input window/registration could not be created (e.g. blocked by policy/AV).
     public bool HookInstalled { get; private set; }
 
     public Win32MouseHook(FreelookHotkey hotkey)
     {
         _hotkey = hotkey;
-        _proc = HookCallback;
+        _wndProc = WndProcCallback;
 
-        _hookThread = new Thread(RunHookMessageLoop) { IsBackground = true, Name = "SGR-MouseHook" };
-        _hookThread.Start();
+        _messageThread = new Thread(RunMessageLoop) { IsBackground = true, Name = "SGR-RawInput" };
+        _messageThread.Start();
 
         _hotkeyPollThread = new Thread(PollHotkeyState) { IsBackground = true, Name = "SGR-HotkeyPoll" };
         _hotkeyPollThread.Start();
     }
 
-    private void RunHookMessageLoop()
+    private void RunMessageLoop()
     {
-        using var curModule = System.Diagnostics.Process.GetCurrentProcess().MainModule;
-        _hookHandle = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule?.ModuleName ?? ""), 0);
-        HookInstalled = _hookHandle != IntPtr.Zero;
+        _messageThreadId = GetCurrentThreadId();
+        IntPtr hInstance = GetModuleHandle(null);
 
-        // Pump a Win32 message loop so the hook callback is dispatched.
-        while (_running)
+        var wc = new WNDCLASSEX
         {
-            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Background);
-            Thread.Sleep(1);
+            cbSize = Marshal.SizeOf<WNDCLASSEX>(),
+            lpfnWndProc = _wndProc,
+            hInstance = hInstance,
+            lpszClassName = WindowClassName,
+        };
+        RegisterClassEx(ref wc);
+
+        IntPtr hwnd = CreateWindowEx(0, WindowClassName, null, 0, 0, 0, 0, 0,
+            HWND_MESSAGE, IntPtr.Zero, hInstance, IntPtr.Zero);
+
+        HookInstalled = hwnd != IntPtr.Zero && RegisterForRawInput(hwnd);
+
+        while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
+        {
+            TranslateMessage(ref msg);
+            DispatchMessage(ref msg);
         }
 
-        if (_hookHandle != IntPtr.Zero) UnhookWindowsHookEx(_hookHandle);
+        if (hwnd != IntPtr.Zero) DestroyWindow(hwnd);
+        UnregisterClass(WindowClassName, hInstance);
+    }
+
+    private static bool RegisterForRawInput(IntPtr hwnd)
+    {
+        var device = new RAWINPUTDEVICE
+        {
+            usUsagePage = HID_USAGE_PAGE_GENERIC,
+            usUsage = HID_USAGE_GENERIC_MOUSE,
+            dwFlags = RIDEV_INPUTSINK, // receive input even while another window (the game) has focus
+            hwndTarget = hwnd,
+        };
+        return RegisterRawInputDevices(new[] { device }, 1, (uint)Marshal.SizeOf<RAWINPUTDEVICE>());
+    }
+
+    private IntPtr WndProcCallback(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (msg == WM_INPUT) HandleRawInput(lParam);
+        return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
+
+    private void HandleRawInput(IntPtr hRawInput)
+    {
+        uint size = 0;
+        GetRawInputData(hRawInput, RID_INPUT, IntPtr.Zero, ref size, (uint)Marshal.SizeOf<RAWINPUTHEADER>());
+        if (size == 0) return;
+
+        IntPtr buffer = Marshal.AllocHGlobal((int)size);
+        try
+        {
+            if (GetRawInputData(hRawInput, RID_INPUT, buffer, ref size, (uint)Marshal.SizeOf<RAWINPUTHEADER>()) != size)
+                return;
+
+            var raw = Marshal.PtrToStructure<RAWINPUT>(buffer);
+            if (raw.header.dwType != RIM_TYPEMOUSE) return;
+            if ((raw.mouse.usFlags & MOUSE_MOVE_ABSOLUTE) != 0) return; // e.g. RDP/tablet — not a relative delta
+
+            if (raw.mouse.lLastX != 0 || raw.mouse.lLastY != 0)
+                MouseMoved?.Invoke(raw.mouse.lLastX, raw.mouse.lLastY);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
     }
 
     private void PollHotkeyState()
     {
-        while (_running)
+        while (_pollRunning)
         {
             // High bit set = key currently down.
             IsHotkeyHeld = (GetAsyncKeyState(_hotkey.VirtualKeyCode) & 0x8000) != 0;
@@ -99,26 +251,9 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
         }
     }
 
-    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-    {
-        if (nCode >= 0 && wParam.ToInt32() == WM_MOUSEMOVE)
-        {
-            var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-            if (_havePreviousPoint)
-            {
-                int dx = hookStruct.pt.X - _lastX;
-                int dy = hookStruct.pt.Y - _lastY;
-                if (dx != 0 || dy != 0) MouseMoved?.Invoke(dx, dy);
-            }
-            _lastX = hookStruct.pt.X;
-            _lastY = hookStruct.pt.Y;
-            _havePreviousPoint = true;
-        }
-        return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
-    }
-
     public void Dispose()
     {
-        _running = false;
+        _pollRunning = false;
+        if (_messageThreadId != 0) PostThreadMessage(_messageThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
     }
 }
