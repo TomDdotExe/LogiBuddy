@@ -10,7 +10,7 @@ public class CalibrationSessionTests
         new(input, TimeSpan.FromMinutes(5));
 
     [Fact]
-    public void Start_MovesToAwaitRightLimit_AndAnnounces()
+    public void Start_MovesToAwaitRightMark_AndAnnounces()
     {
         var input = new FakeMouseInputSource();
         using var session = NewSession(input);
@@ -19,30 +19,43 @@ public class CalibrationSessionTests
 
         session.Start();
 
-        Assert.Equal(CalibrationStep.AwaitRightLimit, session.Step);
-        Assert.Equal(CalibrationStep.AwaitRightLimit, announced);
+        Assert.Equal(CalibrationStep.AwaitRightMark, session.Step);
+        Assert.Equal(CalibrationStep.AwaitRightMark, announced);
     }
 
     [Fact]
-    public void Start_ZeroesAccumulators_MovementBeforeStartIsIgnored()
+    public void Start_ZeroesAccumulator_MovementBeforeStartIsIgnored()
     {
-        var input = new FakeMouseInputSource { IsHotkeyHeld = true };
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+
+        input.RaiseMove(-999, -999);   // before Start: Step is Idle, ignored
+        session.Start();
+        input.RaiseMove(6000, 0);
+        session.Mark();                 // right mark
+
+        input.RaiseMove(-7000, 0);
+        session.Mark();                 // left mark
+
+        Assert.Equal(CalibrationStep.Completed, session.Step);
+    }
+
+    [Fact]
+    public void RightMark_RezeroesAccumulator_OnlyMovementBetweenMarksCounts()
+    {
+        var input = new FakeMouseInputSource();
         using var session = NewSession(input);
         CalibrationResult? result = null;
         session.Completed += r => result = r;
 
-        input.RaiseMove(-999, -999);   // before Start: Step is Idle, ignored
         session.Start();
+        input.RaiseMove(6000, 0);       // the "turn 90 right" sweep, discarded at the mark
+        session.Mark();                 // right mark rezeroes
 
-        input.RaiseMove(6000, 0);
-        session.Mark();                 // right limit
-        input.RaiseMove(-2000, -3000);  // net from start: x +4000, y -3000
-        session.Mark();                 // corner
+        input.RaiseMove(-7000, 0);      // the 180-left sweep
+        session.Mark();                 // left mark
 
-        Assert.Equal(CalibrationStep.Completed, session.Step);
-        Assert.Equal(6000f, result!.HalfSweepCounts, precision: 3);
-        Assert.Equal(4000f, result.CornerXCounts, precision: 3);
-        Assert.Equal(-3000f, result.CornerYCounts, precision: 3);
+        Assert.Equal(7000f, result!.SweepCounts, precision: 3);
     }
 
     [Fact]
@@ -56,16 +69,31 @@ public class CalibrationSessionTests
         session.Start();
         input.RaiseMove(6000, 0);
         session.Mark();                 // right
-        input.RaiseMove(0, -2000);
-        session.Mark();                 // corner
+        input.RaiseMove(-7000, 0);
+        session.Mark();                 // left
 
-        Assert.Equal(6000f, result!.HalfSweepCounts, precision: 3);
-        Assert.Equal(6000f, result.CornerXCounts, precision: 3);
-        Assert.Equal(-2000f, result.CornerYCounts, precision: 3);
+        Assert.Equal(7000f, result!.SweepCounts, precision: 3);
     }
 
     [Fact]
-    public void RightSweepTooSmall_Fails()
+    public void SweepCounts_IsAbsoluteValue_DirectionAgnostic()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        CalibrationResult? result = null;
+        session.Completed += r => result = r;
+
+        session.Start();
+        input.RaiseMove(-6000, 0);      // turned right using negative dx convention
+        session.Mark();
+        input.RaiseMove(7000, 0);
+        session.Mark();
+
+        Assert.Equal(7000f, result!.SweepCounts, precision: 3);
+    }
+
+    [Fact]
+    public void LeftSweepTooSmall_Fails()
     {
         var input = new FakeMouseInputSource();
         using var session = NewSession(input);
@@ -75,30 +103,14 @@ public class CalibrationSessionTests
         session.Ended += r => ended = r;
 
         session.Start();
-        input.RaiseMove(20, 0);
-        session.Mark();               // right, only 20 counts
+        input.RaiseMove(6000, 0);
+        session.Mark();               // right mark
+        input.RaiseMove(-20, 0);
+        session.Mark();               // left, only 20 counts
 
         Assert.Equal(CalibrationStep.Failed, session.Step);
         Assert.False(completed);
         Assert.False(string.IsNullOrWhiteSpace(ended));
-    }
-
-    [Fact]
-    public void CornerTooCloseToCentre_Fails()
-    {
-        var input = new FakeMouseInputSource();
-        using var session = NewSession(input);
-        var completed = false;
-        session.Completed += _ => completed = true;
-
-        session.Start();
-        input.RaiseMove(6000, 0);
-        session.Mark();               // right
-        input.RaiseMove(-6000, 10);   // back near centre: x 0, y 10 -> distance 10
-        session.Mark();               // corner
-
-        Assert.Equal(CalibrationStep.Failed, session.Step);
-        Assert.False(completed);
     }
 
     [Fact]
@@ -131,7 +143,7 @@ public class CalibrationSessionTests
         using var session = NewSession(input);
         session.Start();
         input.RaiseMove(6000, 0); session.Mark();
-        input.RaiseMove(0, -3000); session.Mark();
+        input.RaiseMove(-7000, 0); session.Mark();
 
         var step = session.Step;
         session.Mark();
@@ -148,7 +160,7 @@ public class CalibrationSessionTests
 
         var ex = Record.Exception(() => input.RaiseMove(5000, 5000));
         Assert.Null(ex);
-        Assert.Equal(CalibrationStep.AwaitRightLimit, session.Step);
+        Assert.Equal(CalibrationStep.AwaitRightMark, session.Step);
     }
 
     [Fact]

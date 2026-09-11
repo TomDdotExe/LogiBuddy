@@ -541,20 +541,12 @@ public class MainViewModel : INotifyPropertyChanged
         });
         session.Completed += result => Application.Current?.Dispatcher.Invoke(() =>
         {
-            float sens = Profile.MaxYawDegrees / result.HalfSweepCounts;
-            float cornerYawDeg = MathF.Abs(result.CornerXCounts) * sens;
-            float cornerPitchDeg = MathF.Abs(result.CornerYCounts) * sens;
-
+            float sens = 180f / result.SweepCounts;
             Profile.MouseSensitivity = sens;
-            Profile.MeasuredYawSweepCounts = result.HalfSweepCounts;
-            if (cornerPitchDeg > 1f) Profile.MaxPitchDegrees = cornerPitchDeg;
-            Profile.MeasuredMaxOffAxisDegrees =
-                MathF.Sqrt(cornerYawDeg * cornerYawDeg + cornerPitchDeg * cornerPitchDeg);
 
-            _announcer.Say("Corner set. Calibration complete.");
+            _announcer.Say("Left mark set. Calibration complete.");
             StatusMessage =
-                $"Calibration complete — sensitivity {sens:0.####}, max pitch {Profile.MaxPitchDegrees:0.#}°, " +
-                $"off-axis limit {Profile.MeasuredMaxOffAxisDegrees:0.#}°. Click Save Profile to keep it.";
+                $"Calibration complete — sensitivity {sens:0.####}. Click Save Profile to keep it.";
             TeardownCalibration();
         });
         session.Ended += reason => Application.Current?.Dispatcher.Invoke(() =>
@@ -579,8 +571,8 @@ public class MainViewModel : INotifyPropertyChanged
     /// "" here (CalibrationAnnouncer.Say ignores blank text).
     private static string StepPhrase(CalibrationStep step) => step switch
     {
-        CalibrationStep.AwaitRightLimit => "Calibration started. Face forward, then look fully right and tap.",
-        CalibrationStep.AwaitCorner => "Right limit set. Now look to the far corner and tap.",
+        CalibrationStep.AwaitRightMark => "Calibration started. Face forward, then turn 90 degrees right and tap.",
+        CalibrationStep.AwaitLeftMark => "Right mark set. Now turn 180 degrees left, past centre, and tap.",
         _ => "",
     };
 
