@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using SpotifyGameRadio.Core.Speech;
 
 namespace SpotifyGameRadio.Core.Config;
 
@@ -38,6 +39,11 @@ public class RadioProfile : INotifyPropertyChanged
     private FreelookHotkey _calibrateHotkey = new() { VirtualKeyCode = 0 };
     private float _measuredYawSweepCounts = 0f;
     private float _measuredMaxOffAxisDegrees = 0f;
+    private FreelookHotkey _voiceRecordHotkey = new() { VirtualKeyCode = 0 };
+    private FreelookHotkey _voiceConfirmHotkey = new() { VirtualKeyCode = 0 };
+    private FreelookHotkey _voiceDiscardHotkey = new() { VirtualKeyCode = 0 };
+    private string _voiceCustomVocabulary = VoiceVocabularyDefaults.Starter;
+    private string _voiceMicrophoneDeviceId = "";
 
     public string Name { get => _name; set => SetField(ref _name, value); }
     public string SourceProcessName { get => _sourceProcessName; set => SetField(ref _sourceProcessName, value); }
@@ -147,6 +153,27 @@ public class RadioProfile : INotifyPropertyChanged
     /// combined-angle clamp" (per-axis clamps only). FreelookTracker
     /// clamps sqrt(yaw^2 + pitch^2) to this when > 0.
     public float MeasuredMaxOffAxisDegrees { get => _measuredMaxOffAxisDegrees; set => SetField(ref _measuredMaxOffAxisDegrees, value); }
+
+    /// Global hotkey held to record a voice-chat message. VirtualKeyCode 0
+    /// means unbound (never fires).
+    public FreelookHotkey VoiceRecordHotkey { get => _voiceRecordHotkey; set => SetField(ref _voiceRecordHotkey, value); }
+
+    /// Global hotkey that copies the current voice-chat preview to the
+    /// clipboard and dismisses it. VirtualKeyCode 0 means unbound.
+    public FreelookHotkey VoiceConfirmHotkey { get => _voiceConfirmHotkey; set => SetField(ref _voiceConfirmHotkey, value); }
+
+    /// Global hotkey that discards the current voice-chat preview without
+    /// copying it. VirtualKeyCode 0 means unbound.
+    public FreelookHotkey VoiceDiscardHotkey { get => _voiceDiscardHotkey; set => SetField(ref _voiceDiscardHotkey, value); }
+
+    /// Free-text list (comma or newline separated) of terms to bias voice
+    /// transcription toward, e.g. callsigns and milsim jargon. Turned into a
+    /// Whisper prompt by VocabularyPromptBuilder.
+    public string VoiceCustomVocabulary { get => _voiceCustomVocabulary; set => SetField(ref _voiceCustomVocabulary, value); }
+
+    /// MMDevice id of the capture (microphone) endpoint to record from.
+    /// Empty means "use the default capture device".
+    public string VoiceMicrophoneDeviceId { get => _voiceMicrophoneDeviceId; set => SetField(ref _voiceMicrophoneDeviceId, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

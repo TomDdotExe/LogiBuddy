@@ -133,6 +133,11 @@ public class ConfigStoreTests
             Assert.Equal(0, loaded.CalibrateHotkey.VirtualKeyCode);     // default retained (unbound)
             Assert.Equal(0f, loaded.MeasuredYawSweepCounts);            // default retained
             Assert.Equal(0f, loaded.MeasuredMaxOffAxisDegrees);         // default retained
+            Assert.Equal(0, loaded.VoiceRecordHotkey.VirtualKeyCode);       // default retained (unbound)
+            Assert.Equal(0, loaded.VoiceConfirmHotkey.VirtualKeyCode);      // default retained (unbound)
+            Assert.Equal(0, loaded.VoiceDiscardHotkey.VirtualKeyCode);      // default retained (unbound)
+            Assert.Equal(SpotifyGameRadio.Core.Speech.VoiceVocabularyDefaults.Starter, loaded.VoiceCustomVocabulary); // default retained
+            Assert.Equal("", loaded.VoiceMicrophoneDeviceId);              // default retained
         }
         finally
         {
