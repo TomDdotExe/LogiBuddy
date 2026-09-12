@@ -178,17 +178,52 @@ public class MainViewModel : INotifyPropertyChanged
             CreateSpeechToText(),
             () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary));
         _voiceSession.StateChanged += OnVoiceStateChanged;
-        _voiceSession.Failed += reason => Application.Current?.Dispatcher.Invoke(() => StatusMessage = reason);
+        _voiceSession.Failed += reason =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => StatusMessage = reason);
+            }
+            catch (Exception) { /* app is shutting down; nothing to report */ }
+        };
 
         _voiceRecordWatcher = new TapHotkeyWatcher(Profile.VoiceRecordHotkey, new Win32KeyStateSource());
-        _voiceRecordWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(OnVoiceRecordPressed);
-        _voiceRecordWatcher.Released += () => Application.Current?.Dispatcher.Invoke(() => _voiceSession?.EndRecording());
+        _voiceRecordWatcher.Pressed += () =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(OnVoiceRecordPressed);
+            }
+            catch (Exception) { /* app is shutting down; nothing to record */ }
+        };
+        _voiceRecordWatcher.Released += () =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => _voiceSession?.EndRecording());
+            }
+            catch (Exception) { /* app is shutting down; nothing to record */ }
+        };
 
         _voiceConfirmWatcher = new TapHotkeyWatcher(Profile.VoiceConfirmHotkey, new Win32KeyStateSource());
-        _voiceConfirmWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(OnVoiceConfirmPressed);
+        _voiceConfirmWatcher.Pressed += () =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(OnVoiceConfirmPressed);
+            }
+            catch (Exception) { /* app is shutting down; nothing to confirm */ }
+        };
 
         _voiceDiscardWatcher = new TapHotkeyWatcher(Profile.VoiceDiscardHotkey, new Win32KeyStateSource());
-        _voiceDiscardWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(() => _voiceSession?.Discard());
+        _voiceDiscardWatcher.Pressed += () =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => _voiceSession?.Discard());
+            }
+            catch (Exception) { /* app is shutting down; nothing to discard */ }
+        };
 
         // Crash recovery runs during construction, i.e. while the window is
         // being built — nothing in here may throw, or the app fails to launch.
@@ -592,27 +627,31 @@ public class MainViewModel : INotifyPropertyChanged
 
     private void OnVoiceStateChanged(VoiceChatState state)
     {
-        Application.Current?.Dispatcher.Invoke(() =>
+        try
         {
-            if (state == VoiceChatState.Idle)
+            Application.Current?.Dispatcher.Invoke(() =>
             {
-                _voiceOverlay?.Hide();
-                return;
-            }
+                if (state == VoiceChatState.Idle)
+                {
+                    _voiceOverlay?.Hide();
+                    return;
+                }
 
-            _voiceOverlay ??= new VoicePreviewOverlay();
-            _voiceOverlay.SetText(state switch
-            {
-                VoiceChatState.Recording => "Listening…",
-                VoiceChatState.Transcribing => "Transcribing…",
-                VoiceChatState.PreviewReady => _voiceSession?.Transcript ?? "",
-                _ => "",
+                _voiceOverlay ??= new VoicePreviewOverlay();
+                _voiceOverlay.SetText(state switch
+                {
+                    VoiceChatState.Recording => "Listening…",
+                    VoiceChatState.Transcribing => "Transcribing…",
+                    VoiceChatState.PreviewReady => _voiceSession?.Transcript ?? "",
+                    _ => "",
+                });
+                string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Confirm";
+                string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Discard";
+                _voiceOverlay.SetHint($"{confirmName} to copy · {discardName} to clear · hold Record again to redo");
+                _voiceOverlay.Show();
             });
-            string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Confirm";
-            string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Discard";
-            _voiceOverlay.SetHint($"{confirmName} to copy · {discardName} to clear · hold Record again to redo");
-            _voiceOverlay.Show();
-        });
+        }
+        catch (Exception) { /* app is shutting down; nothing to show */ }
     }
 
     private void EnterInVehicle()
