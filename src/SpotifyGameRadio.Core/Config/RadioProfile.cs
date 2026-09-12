@@ -16,7 +16,7 @@ public class RadioProfile : INotifyPropertyChanged
     private float _distortionDrive = 0.2f;
     private float _compressorThresholdDb = -18f;
     private float _compressorRatio = 4f;
-    private float _noiseLevel = 0.05f;
+    private float _noiseLevel = 0.01f;
     private float _wetDryMix = 1.0f;
     private FreelookHotkey _hotkey = new();
     private float _mouseSensitivity = 0.15f; // degrees per mouse count, yaw

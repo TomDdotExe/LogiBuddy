@@ -21,7 +21,6 @@ public class MainViewModel : INotifyPropertyChanged
     private RadioPipeline? _pipeline;
     private Win32MouseHook? _mouseHook;
     private System.Windows.Threading.DispatcherTimer? _uiTimer;
-    private TestTonePlayer? _testTone;
     private readonly ISourceSessionMuter _sessionMuter = new NAudioSourceSessionMuter();
     private string? _mutedProcessName;
     private TapHotkeyWatcher? _recenterHotkeyWatcher;
@@ -96,31 +95,6 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _listenerPitch;
         set { if (value == _listenerPitch) return; _listenerPitch = value; OnPropertyChanged(); }
-    }
-
-    private bool _testToneEnabled;
-    /// Plays a soft 440 Hz sine from this process so per-process loopback has a
-    /// source to capture without needing Spotify running. Independent of
-    /// Start/Stop; select "SpotifyGameRadio.App" in the Source list to route it
-    /// through the radio pipeline.
-    public bool TestToneEnabled
-    {
-        get => _testToneEnabled;
-        set
-        {
-            if (_testToneEnabled == value) return;
-            _testToneEnabled = value;
-            if (value)
-            {
-                _testTone ??= new TestTonePlayer();
-                _testTone.Start();
-            }
-            else
-            {
-                _testTone?.Stop();
-            }
-            OnPropertyChanged();
-        }
     }
 
     public RadioProfile Profile { get; private set; } = new();
@@ -853,11 +827,10 @@ public class MainViewModel : INotifyPropertyChanged
         ListenerPitch = 0;
     }
 
-    /// Called from MainWindow.OnClosed so the test tone never outlives the window.
+    /// Called from MainWindow.OnClosed to release resources that don't
+    /// belong to the capture pipeline (already torn down by Stop()).
     public void Cleanup()
     {
-        _testTone?.Dispose();
-        _testTone = null;
         if (_calibrationSession is not null)
         {
             _calibrationSession.Abort();

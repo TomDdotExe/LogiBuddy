@@ -5,7 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Used directly by Audio/TestTonePlayer.cs (also flows transitively via Core). -->
+    <!-- Used directly by Audio/CalibrationAnnouncer.cs (also flows transitively via Core). -->
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Speech" Version="8.0.0" />
   </ItemGroup>

@@ -25,21 +25,26 @@
         <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
     </Style>
 
-    <Style x:Key="RowLabelText" TargetType="TextBlock">
+    <!-- BasedOn the base TextBlock style is required on every named style below:
+         an explicit Style= reference replaces the implicit type-based style
+         entirely rather than merging with it, so without BasedOn these would
+         fall back to WPF's own defaults (Foreground defaults to black) for
+         anything they don't set themselves. -->
+    <Style x:Key="RowLabelText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
-    <Style x:Key="MutedText" TargetType="TextBlock">
+    <Style x:Key="MutedText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
     </Style>
 
-    <Style x:Key="SectionHeaderText" TargetType="TextBlock">
+    <Style x:Key="SectionHeaderText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="14" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Margin" Value="0,0,0,10" />
     </Style>
 
-    <Style x:Key="ReadoutText" TargetType="TextBlock">
+    <Style x:Key="ReadoutText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontFamily" Value="{StaticResource ReadoutFont}" />
         <Setter Property="HorizontalAlignment" Value="Right" />
         <Setter Property="VerticalAlignment" Value="Center" />
