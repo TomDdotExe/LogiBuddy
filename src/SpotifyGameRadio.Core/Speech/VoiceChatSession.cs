@@ -7,6 +7,17 @@ public enum VoiceChatState { Idle, Recording, Transcribing, PreviewReady }
 /// Push-to-talk record -> transcribe -> preview -> confirm/discard/re-record
 /// state machine. Pure aside from its two injected dependencies; unit-tested
 /// with fakes. Modelled on CalibrationSession's event-driven shape.
+///
+/// Threading: this type has no internal locking. Callers must invoke
+/// <see cref="BeginRecording"/>, <see cref="EndRecording"/>,
+/// <see cref="Discard"/>, and <see cref="Dispose"/> from a single logical
+/// thread, and must expect <see cref="StateChanged"/>, <see cref="PreviewReady"/>,
+/// and <see cref="Failed"/> to fire on that same thread (e.g. all calls and
+/// event handlers marshaled through the same UI dispatcher). The async
+/// transcription continuation in particular is only safe to observe from
+/// that same logical thread — interleaving calls across threads, or
+/// receiving the transcription continuation on a different thread than the
+/// one that calls the public methods, is not supported.
 public sealed class VoiceChatSession : IDisposable
 {
     // Below this many 16kHz mono samples (~200ms) a recording is treated as

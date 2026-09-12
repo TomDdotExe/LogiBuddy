@@ -19,9 +19,15 @@ public class FakeSpeechToText : ISpeechToText
     public Exception? ThrowOnTranscribe;
     public string? LastVocabularyHint;
 
+    // When set, TranscribeAsync returns this TCS's Task instead of an
+    // already-completed one, letting a test control exactly when
+    // transcription "completes" and observe genuinely in-flight state.
+    public TaskCompletionSource<string>? PendingTranscription;
+
     public Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
     {
         LastVocabularyHint = vocabularyHint;
+        if (PendingTranscription is not null) return PendingTranscription.Task;
         if (ThrowOnTranscribe is not null) return Task.FromException<string>(ThrowOnTranscribe);
         return Task.FromResult(Result);
     }
@@ -46,7 +52,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task HappyPath_RecordingThenPreviewReady()
+    public void HappyPath_RecordingThenPreviewReady()
     {
         var mic = new FakeMicrophoneCapture();
         var stt = new FakeSpeechToText();
@@ -70,7 +76,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task EndRecording_BufferTooShort_ReturnsToIdleWithoutTranscribing()
+    public void EndRecording_BufferTooShort_ReturnsToIdleWithoutTranscribing()
     {
         var mic = new FakeMicrophoneCapture { NextStopResult = new float[100] }; // well under 200ms @ 16kHz
         var stt = new FakeSpeechToText();
@@ -86,7 +92,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task EndRecording_EmptyTranscript_RaisesFailedAndReturnsToIdle()
+    public void EndRecording_EmptyTranscript_RaisesFailedAndReturnsToIdle()
     {
         var mic = new FakeMicrophoneCapture();
         var stt = new FakeSpeechToText { Result = "   " };
@@ -101,7 +107,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task EndRecording_TranscriptionThrows_RaisesFailedAndReturnsToIdle()
+    public void EndRecording_TranscriptionThrows_RaisesFailedAndReturnsToIdle()
     {
         var mic = new FakeMicrophoneCapture();
         var stt = new FakeSpeechToText { ThrowOnTranscribe = new InvalidOperationException("model not loaded") };
@@ -116,7 +122,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task Discard_FromPreviewReady_ReturnsToIdleAndClearsTranscript()
+    public void Discard_FromPreviewReady_ReturnsToIdleAndClearsTranscript()
     {
         var mic = new FakeMicrophoneCapture();
         var stt = new FakeSpeechToText();
@@ -133,7 +139,7 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public async Task BeginRecording_WhilePreviewReady_ClearsOldTranscriptAndStartsOver()
+    public void BeginRecording_WhilePreviewReady_ClearsOldTranscriptAndStartsOver()
     {
         var mic = new FakeMicrophoneCapture();
         var stt = new FakeSpeechToText();
@@ -147,6 +153,43 @@ public class VoiceChatSessionTests
 
         Assert.Equal(VoiceChatState.Recording, session.State);
         Assert.Null(session.Transcript);
+    }
+
+    [Fact]
+    public async Task Dispose_DuringTranscription_SuppressesLaterEvents()
+    {
+        var mic = new FakeMicrophoneCapture();
+        var tcs = new TaskCompletionSource<string>();
+        var stt = new FakeSpeechToText { PendingTranscription = tcs };
+        var session = CreateSession(mic, stt, out _, out var previews, out var failures);
+
+        session.BeginRecording();
+        session.EndRecording();
+
+        // The fake's TranscribeAsync returns a not-yet-completed task, so the
+        // transcription is genuinely in-flight at this point (unlike every
+        // other test in this file, which uses an already-completed fake
+        // task and observes the continuation having already run).
+        Assert.Equal(VoiceChatState.Transcribing, session.State);
+
+        session.Dispose();
+
+        // Complete the in-flight transcription after Dispose(). If the
+        // ct.IsCancellationRequested guard in RunTranscription works as
+        // intended, this stale result must not produce a PreviewReady/Failed
+        // event.
+        tcs.SetResult("some transcript");
+
+        // Give the "async void" continuation a chance to run in case it
+        // isn't inlined synchronously by SetResult on this thread. A short
+        // delay is the simplest deterministic-enough mechanism available
+        // here: there's no test hook into the continuation, and the delay
+        // only needs to be "long enough for a already-scheduled continuation
+        // to run", not "long enough to wait for real work".
+        await Task.Delay(50);
+
+        Assert.Empty(previews);
+        Assert.Empty(failures);
     }
 
     [Fact]
