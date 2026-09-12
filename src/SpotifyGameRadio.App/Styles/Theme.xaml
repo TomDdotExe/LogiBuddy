@@ -8,11 +8,12 @@
     <SolidColorBrush x:Key="SurfaceAltBrush" Color="#FF2A2F3A" />
     <SolidColorBrush x:Key="BorderBrush2" Color="#FF333844" />
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFE4E6EB" />
-    <SolidColorBrush x:Key="TextMutedBrush" Color="#FF868C99" />
+    <!-- ~7:1 contrast against SurfaceBrush (the old #FF868C99 only cleared ~4.55:1). -->
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#FFA9AFBD" />
     <SolidColorBrush x:Key="AccentBrush" Color="#FFC98A3E" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="#FFE0AD68" />
     <SolidColorBrush x:Key="AccentPressedBrush" Color="#FFA8721F" />
-    <SolidColorBrush x:Key="AttentionBrush" Color="#FFD9754A" />
+    <SolidColorBrush x:Key="AttentionBrush" Color="#FFE08662" />
 
     <!-- Type -->
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily>

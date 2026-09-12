@@ -127,6 +127,7 @@ public class ConfigStoreTests
             Assert.Equal(0, loaded.RecenterHotkey.VirtualKeyCode);      // default retained (unbound)
             Assert.Equal(0, loaded.VehicleToggleHotkey.VirtualKeyCode); // default retained (unbound)
             Assert.Equal(3.0f, loaded.VehicleExitDelaySeconds);         // default retained
+            Assert.False(loaded.HoldToExitVehicle);                     // default retained
             Assert.False(loaded.AutoMuteSource);                        // default retained
             Assert.Equal(0, loaded.CalibrateHotkey.VirtualKeyCode);     // default retained (unbound)
             Assert.Equal(0f, loaded.MeasuredYawSweepCounts);            // default retained

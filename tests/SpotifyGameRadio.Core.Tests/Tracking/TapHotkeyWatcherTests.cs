@@ -82,6 +82,57 @@ public class TapHotkeyWatcherTests
     }
 
     [Fact]
+    public void Poll_FiresReleasedOnceWhenKeyGoesUp()
+    {
+        var keyState = new FakeKeyStateSource();
+        var watcher = new TapHotkeyWatcher(new FreelookHotkey { VirtualKeyCode = Vk }, keyState, startPolling: false);
+        int releasedCount = 0;
+        watcher.Released += () => releasedCount++;
+
+        keyState.SetDown(Vk, true);
+        watcher.Poll(); // rising edge, no release
+        keyState.SetDown(Vk, false);
+        watcher.Poll(); // falling edge, fires
+
+        Assert.Equal(1, releasedCount);
+    }
+
+    [Fact]
+    public void Poll_DoesNotRefireReleasedWhileUp()
+    {
+        var keyState = new FakeKeyStateSource();
+        var watcher = new TapHotkeyWatcher(new FreelookHotkey { VirtualKeyCode = Vk }, keyState, startPolling: false);
+        int releasedCount = 0;
+        watcher.Released += () => releasedCount++;
+
+        keyState.SetDown(Vk, true);
+        watcher.Poll();
+        keyState.SetDown(Vk, false);
+
+        watcher.Poll();
+        watcher.Poll();
+        watcher.Poll();
+
+        Assert.Equal(1, releasedCount);
+    }
+
+    [Fact]
+    public void Poll_UnboundHotkeyNeverFiresReleased()
+    {
+        var keyState = new FakeKeyStateSource();
+        var watcher = new TapHotkeyWatcher(new FreelookHotkey { VirtualKeyCode = 0 }, keyState, startPolling: false);
+        int releasedCount = 0;
+        watcher.Released += () => releasedCount++;
+
+        keyState.SetDown(0, true);
+        watcher.Poll();
+        keyState.SetDown(0, false);
+        watcher.Poll();
+
+        Assert.Equal(0, releasedCount);
+    }
+
+    [Fact]
     public void SetHotkey_RebindsLive()
     {
         var keyState = new FakeKeyStateSource();

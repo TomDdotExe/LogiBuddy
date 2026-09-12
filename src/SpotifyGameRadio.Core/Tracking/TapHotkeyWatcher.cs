@@ -2,13 +2,14 @@ using SpotifyGameRadio.Core.Config;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-/// Polls a single rebindable key and raises Pressed once per press (rising
-/// edge only) — unlike Win32MouseHook's hold-style freelook hotkey, this
-/// never repeatedly fires while held. VirtualKeyCode == 0 means "unbound":
-/// Poll() never fires.
+/// Polls a single rebindable key and raises Pressed/Released once per edge
+/// (rising/falling) — unlike Win32MouseHook's hold-style freelook hotkey,
+/// neither ever repeatedly fires while held or released. VirtualKeyCode == 0
+/// means "unbound": Poll() never fires either event.
 public class TapHotkeyWatcher : IDisposable
 {
     public event Action? Pressed;
+    public event Action? Released;
 
     private readonly IKeyStateSource _keyState;
     private volatile FreelookHotkey _hotkey;
@@ -54,6 +55,7 @@ public class TapHotkeyWatcher : IDisposable
         var hotkey = _hotkey;
         bool isDown = hotkey.VirtualKeyCode != 0 && _keyState.IsKeyDown(hotkey.VirtualKeyCode);
         if (isDown && !_wasDown) Pressed?.Invoke();
+        else if (!isDown && _wasDown) Released?.Invoke();
         _wasDown = isDown;
     }
 

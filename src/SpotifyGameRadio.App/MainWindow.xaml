@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
         xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
-        Title="Spotify Game Radio" Width="1040" Height="900" MinWidth="960" MinHeight="700"
+        Title="Spotify Game Radio" Width="1040" Height="960" MinWidth="960" MinHeight="700"
         Background="{StaticResource BgBrush}">
     <Window.DataContext>
         <local:MainViewModel />
@@ -132,6 +132,10 @@
                                                      Margin="0,0,0,4"
                                                      ToolTip="Delay before the radio mutes after toggling 'out of vehicle', for games with an exit animation (e.g. Squad)." />
                             <TextBlock Text="Entering back &quot;in&quot; is always immediate." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+
+                            <CheckBox Content="Hold to exit (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
+                                      Margin="0,0,0,10"
+                                      ToolTip="Off (default): tap the vehicle toggle hotkey once to exit, again to return. On: hold the key down to exit, release to return — avoids accidental exits/entries when the same key is reused for something else in a game." />
 
                             <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
                                       ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />

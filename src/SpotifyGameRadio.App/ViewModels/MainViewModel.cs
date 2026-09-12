@@ -454,36 +454,61 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// Fires on the vehicle-toggle hotkey's key-down edge. In tap-to-toggle
+    /// mode (default) this flips in/out of vehicle. In hold-to-exit mode this
+    /// always means "exiting" — OnVehicleToggleReleased is what returns to
+    /// "in vehicle".
     private void OnVehicleTogglePressed()
     {
+        if (Profile.HoldToExitVehicle)
+        {
+            EnterOutOfVehicle();
+            return;
+        }
+
         _isInVehicle = !_isInVehicle;
+        if (_isInVehicle) EnterInVehicle(); else EnterOutOfVehicle();
+    }
+
+    /// Fires on the vehicle-toggle hotkey's key-up edge. Only meaningful in
+    /// hold-to-exit mode, where releasing the key returns to "in vehicle"
+    /// immediately (matching tap mode's "entering back in is always
+    /// immediate" behaviour). Ignored in tap-to-toggle mode.
+    private void OnVehicleToggleReleased()
+    {
+        if (!Profile.HoldToExitVehicle) return;
+        _isInVehicle = true;
+        EnterInVehicle();
+    }
+
+    private void EnterInVehicle()
+    {
         _vehicleExitTimer?.Stop();
         _vehicleExitTimer = null;
+        _pipeline?.SetVehicleMuted(false);
+        StatusMessage = "In vehicle";
+    }
 
-        if (_isInVehicle)
+    private void EnterOutOfVehicle()
+    {
+        _vehicleExitTimer?.Stop();
+        _vehicleExitTimer = null;
+        StatusMessage = $"Exiting vehicle — muting in {Profile.VehicleExitDelaySeconds:0.#}s";
+        float delaySeconds = Profile.VehicleExitDelaySeconds;
+        if (float.IsNaN(delaySeconds) || float.IsInfinity(delaySeconds)) delaySeconds = 0f;
+        delaySeconds = Math.Clamp(delaySeconds, 0f, 60f);
+        var timer = new System.Windows.Threading.DispatcherTimer
         {
-            _pipeline?.SetVehicleMuted(false);
-            StatusMessage = "In vehicle";
-        }
-        else
+            Interval = TimeSpan.FromSeconds(delaySeconds)
+        };
+        timer.Tick += (_, _) =>
         {
-            StatusMessage = $"Exiting vehicle — muting in {Profile.VehicleExitDelaySeconds:0.#}s";
-            float delaySeconds = Profile.VehicleExitDelaySeconds;
-            if (float.IsNaN(delaySeconds) || float.IsInfinity(delaySeconds)) delaySeconds = 0f;
-            delaySeconds = Math.Clamp(delaySeconds, 0f, 60f);
-            var timer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(delaySeconds)
-            };
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                _pipeline?.SetVehicleMuted(true);
-                StatusMessage = "Out of vehicle";
-            };
-            _vehicleExitTimer = timer;
-            timer.Start();
-        }
+            timer.Stop();
+            _pipeline?.SetVehicleMuted(true);
+            StatusMessage = "Out of vehicle";
+        };
+        _vehicleExitTimer = timer;
+        timer.Start();
     }
 
     /// Snaps the freelook listener orientation back to forward, both in the
@@ -659,6 +684,14 @@ public class MainViewModel : INotifyPropertyChanged
                 try
                 {
                     Application.Current?.Dispatcher.Invoke(OnVehicleTogglePressed);
+                }
+                catch (Exception) { /* app is shutting down; nothing to toggle */ }
+            };
+            vehicleToggleHotkeyWatcher.Released += () =>
+            {
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(OnVehicleToggleReleased);
                 }
                 catch (Exception) { /* app is shutting down; nothing to toggle */ }
             };

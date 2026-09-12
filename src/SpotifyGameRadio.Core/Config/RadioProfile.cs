@@ -32,6 +32,7 @@ public class RadioProfile : INotifyPropertyChanged
     private FreelookHotkey _recenterHotkey = new() { VirtualKeyCode = 0 };
     private FreelookHotkey _vehicleToggleHotkey = new() { VirtualKeyCode = 0 };
     private float _vehicleExitDelaySeconds = 3.0f;
+    private bool _holdToExitVehicle = false;
     private bool _autoMuteSource = false;
     private FreelookHotkey _calibrateHotkey = new() { VirtualKeyCode = 0 };
     private float _measuredYawSweepCounts = 0f;
@@ -98,6 +99,12 @@ public class RadioProfile : INotifyPropertyChanged
     /// animation. 0 = mute (almost) immediately. Entering back "in" is always
     /// immediate, no delay.
     public float VehicleExitDelaySeconds { get => _vehicleExitDelaySeconds; set => SetField(ref _vehicleExitDelaySeconds, value); }
+
+    /// When true, the vehicle-toggle hotkey works as hold-to-exit: holding it
+    /// down starts the exit-delay countdown, releasing it returns to "in
+    /// vehicle" immediately. When false (default), the hotkey is a tap-to-
+    /// toggle switch as before — press once to exit, again to return.
+    public bool HoldToExitVehicle { get => _holdToExitVehicle; set => SetField(ref _holdToExitVehicle, value); }
 
     /// When true, MainViewModel mutes the source process's own Windows audio
     /// session on Start and unmutes it on Stop, so the raw source is never
