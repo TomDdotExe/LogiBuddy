@@ -8,6 +8,7 @@ using SpotifyGameRadio.Core.Config;
 using SpotifyGameRadio.Core.Dsp;
 using SpotifyGameRadio.Core.Pipeline;
 using SpotifyGameRadio.Core.Spatial;
+using SpotifyGameRadio.Core.Speech;
 using SpotifyGameRadio.Core.Tracking;
 
 namespace SpotifyGameRadio.App.ViewModels;
@@ -32,6 +33,12 @@ public class MainViewModel : INotifyPropertyChanged
     private CalibrationSession? _calibrationSession;
     private TapHotkeyWatcher? _calibrateHotkeyWatcher;
     private readonly CalibrationAnnouncer _announcer;
+    private readonly VoiceModelStore _voiceModelStore = new();
+    private VoiceChatSession? _voiceSession;
+    private TapHotkeyWatcher? _voiceRecordWatcher;
+    private TapHotkeyWatcher? _voiceConfirmWatcher;
+    private TapHotkeyWatcher? _voiceDiscardWatcher;
+    private VoicePreviewOverlay? _voiceOverlay;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
     {
@@ -106,6 +113,26 @@ public class MainViewModel : INotifyPropertyChanged
     /// no change notification is needed; the routing UI row binds IsEnabled to it.
     public bool IsRoutingSupported => _router.IsSupported;
 
+    public IReadOnlyList<CaptureDeviceInfo> AvailableCaptureDevices { get; private set; } = Array.Empty<CaptureDeviceInfo>();
+
+    public bool VoiceModelReady => _voiceModelStore.IsDownloaded;
+
+    private bool _voiceModelDownloading;
+    public bool VoiceModelDownloading
+    {
+        get => _voiceModelDownloading;
+        set { _voiceModelDownloading = value; OnPropertyChanged(); }
+    }
+
+    private double _voiceModelDownloadProgress;
+    public double VoiceModelDownloadProgress
+    {
+        get => _voiceModelDownloadProgress;
+        set { _voiceModelDownloadProgress = value; OnPropertyChanged(); }
+    }
+
+    public ICommand DownloadVoiceModelCommand { get; }
+
     public ICommand RefreshSourcesCommand { get; }
     public ICommand StartCommand { get; }
     public ICommand StopCommand { get; }
@@ -136,6 +163,7 @@ public class MainViewModel : INotifyPropertyChanged
                  && Profile.Hotkey.VirtualKeyCode != 0
                  && Profile.CalibrateHotkey.VirtualKeyCode != 0
                  && Profile.CalibrateHotkey.VirtualKeyCode != Profile.Hotkey.VirtualKeyCode);
+        DownloadVoiceModelCommand = new RelayCommand(_ => _ = DownloadVoiceModelAsync(), _ => !VoiceModelDownloading);
         _announcer = new CalibrationAnnouncer(() => Profile.OutputDeviceId);
 
         RefreshSources();
@@ -144,6 +172,23 @@ public class MainViewModel : INotifyPropertyChanged
         // A profile saved on a Windows 11 box would otherwise make every Start
         // fail on a machine where routing isn't available at all.
         if (!_router.IsSupported && Profile.AutoRouteSource) Profile.AutoRouteSource = false;
+
+        _voiceSession = new VoiceChatSession(
+            new SpotifyGameRadio.Core.Audio.MicrophoneCapture(),
+            CreateSpeechToText(),
+            () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary));
+        _voiceSession.StateChanged += OnVoiceStateChanged;
+        _voiceSession.Failed += reason => Application.Current?.Dispatcher.Invoke(() => StatusMessage = reason);
+
+        _voiceRecordWatcher = new TapHotkeyWatcher(Profile.VoiceRecordHotkey, new Win32KeyStateSource());
+        _voiceRecordWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(OnVoiceRecordPressed);
+        _voiceRecordWatcher.Released += () => Application.Current?.Dispatcher.Invoke(() => _voiceSession?.EndRecording());
+
+        _voiceConfirmWatcher = new TapHotkeyWatcher(Profile.VoiceConfirmHotkey, new Win32KeyStateSource());
+        _voiceConfirmWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(OnVoiceConfirmPressed);
+
+        _voiceDiscardWatcher = new TapHotkeyWatcher(Profile.VoiceDiscardHotkey, new Win32KeyStateSource());
+        _voiceDiscardWatcher.Pressed += () => Application.Current?.Dispatcher.Invoke(() => _voiceSession?.Discard());
 
         // Crash recovery runs during construction, i.e. while the window is
         // being built — nothing in here may throw, or the app fails to launch.
@@ -160,6 +205,8 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = $"Couldn't restore previous source routing: {ex.Message}";
         }
     }
+
+    private ISpeechToText CreateSpeechToText() => new LazyWhisperSpeechToText(() => _voiceModelStore.ModelPath);
 
     private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -209,6 +256,18 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
         }
+        else if (e.PropertyName == nameof(RadioProfile.VoiceRecordHotkey))
+        {
+            _voiceRecordWatcher?.SetHotkey(Profile.VoiceRecordHotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.VoiceConfirmHotkey))
+        {
+            _voiceConfirmWatcher?.SetHotkey(Profile.VoiceConfirmHotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.VoiceDiscardHotkey))
+        {
+            _voiceDiscardWatcher?.SetHotkey(Profile.VoiceDiscardHotkey);
+        }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
             try
@@ -238,6 +297,29 @@ public class MainViewModel : INotifyPropertyChanged
             .Concat(RenderDeviceEnumerator.ListRenderDevices())
             .ToList();
         OnPropertyChanged(nameof(AvailableRenderDevices));
+
+        AvailableCaptureDevices = CaptureDeviceEnumerator.ListCaptureDevices();
+        OnPropertyChanged(nameof(AvailableCaptureDevices));
+    }
+
+    private async Task DownloadVoiceModelAsync()
+    {
+        VoiceModelDownloading = true;
+        var progress = new Progress<double>(p => VoiceModelDownloadProgress = p);
+        try
+        {
+            await _voiceModelStore.DownloadAsync(progress, CancellationToken.None);
+            StatusMessage = "Voice model ready.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Voice model download failed: {ex.Message}";
+        }
+        finally
+        {
+            VoiceModelDownloading = false;
+            OnPropertyChanged(nameof(VoiceModelReady));
+        }
     }
 
     private void LoadProfile(string name)
@@ -484,6 +566,53 @@ public class MainViewModel : INotifyPropertyChanged
         _isInVehicle = true;
         _vehicleExitConfirmed = false;
         EnterInVehicle();
+    }
+
+    private void OnVoiceRecordPressed()
+    {
+        if (!_voiceModelStore.IsDownloaded)
+        {
+            StatusMessage = "Voice model not downloaded yet — see the Voice Chat card.";
+            return;
+        }
+        _voiceSession?.BeginRecording();
+    }
+
+    private void OnVoiceConfirmPressed()
+    {
+        if (_voiceSession is null || _voiceSession.State != VoiceChatState.PreviewReady) return;
+        // Transcript is guaranteed non-null whenever State == PreviewReady
+        // (VoiceChatSession sets it right before that transition) — the
+        // compiler can't see that invariant across two separate properties,
+        // hence the null-forgiving operator rather than a redundant null check.
+        Clipboard.SetText(_voiceSession.Transcript!);
+        StatusMessage = "Copied to clipboard — paste it in.";
+        _voiceSession.Discard();
+    }
+
+    private void OnVoiceStateChanged(VoiceChatState state)
+    {
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            if (state == VoiceChatState.Idle)
+            {
+                _voiceOverlay?.Hide();
+                return;
+            }
+
+            _voiceOverlay ??= new VoicePreviewOverlay();
+            _voiceOverlay.SetText(state switch
+            {
+                VoiceChatState.Recording => "Listening…",
+                VoiceChatState.Transcribing => "Transcribing…",
+                VoiceChatState.PreviewReady => _voiceSession?.Transcript ?? "",
+                _ => "",
+            });
+            string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Confirm";
+            string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Discard";
+            _voiceOverlay.SetHint($"{confirmName} to copy · {discardName} to clear · hold Record again to redo");
+            _voiceOverlay.Show();
+        });
     }
 
     private void EnterInVehicle()
@@ -869,8 +998,32 @@ public class MainViewModel : INotifyPropertyChanged
             TeardownCalibration();
         }
         _announcer.Dispose();
+        _voiceRecordWatcher?.Dispose();
+        _voiceConfirmWatcher?.Dispose();
+        _voiceDiscardWatcher?.Dispose();
+        _voiceSession?.Dispose();
+        _voiceOverlay?.Close();
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    /// Defers constructing the real WhisperFactory until the model file is
+    /// actually present — MainViewModel builds this at startup, before the
+    /// user may have downloaded the model yet.
+    private sealed class LazyWhisperSpeechToText : ISpeechToText, IDisposable
+    {
+        private readonly Func<string> _modelPath;
+        private WhisperSpeechToText? _inner;
+
+        public LazyWhisperSpeechToText(Func<string> modelPath) => _modelPath = modelPath;
+
+        public Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
+        {
+            _inner ??= new WhisperSpeechToText(_modelPath());
+            return _inner.TranscribeAsync(pcm16kMono, vocabularyHint, ct);
+        }
+
+        public void Dispose() => _inner?.Dispose();
+    }
 }
