@@ -33,6 +33,7 @@ public class RadioProfile : INotifyPropertyChanged
     private FreelookHotkey _vehicleToggleHotkey = new() { VirtualKeyCode = 0 };
     private float _vehicleExitDelaySeconds = 3.0f;
     private bool _holdToExitVehicle = false;
+    private float _minHoldToExitSeconds = 0.5f;
     private bool _autoMuteSource = false;
     private FreelookHotkey _calibrateHotkey = new() { VirtualKeyCode = 0 };
     private float _measuredYawSweepCounts = 0f;
@@ -101,10 +102,23 @@ public class RadioProfile : INotifyPropertyChanged
     public float VehicleExitDelaySeconds { get => _vehicleExitDelaySeconds; set => SetField(ref _vehicleExitDelaySeconds, value); }
 
     /// When true, the vehicle-toggle hotkey works as hold-to-exit: holding it
-    /// down starts the exit-delay countdown, releasing it returns to "in
-    /// vehicle" immediately. When false (default), the hotkey is a tap-to-
-    /// toggle switch as before — press once to exit, again to return.
+    /// down starts the exit-delay countdown. Releasing it before
+    /// MinHoldToExitSeconds has elapsed cancels the exit and returns to "in
+    /// vehicle" immediately (the in-game exit likely never registered
+    /// either). Releasing it at or after that threshold confirms the exit —
+    /// release no longer cancels it, so the pending mute completes on
+    /// schedule. The next press+release afterwards is treated as the
+    /// re-entry gesture, which is still always immediate on release. When
+    /// HoldToExitVehicle is false (default), the hotkey is a tap-to-toggle
+    /// switch as before — press once to exit, again to return.
     public bool HoldToExitVehicle { get => _holdToExitVehicle; set => SetField(ref _holdToExitVehicle, value); }
+
+    /// Only meaningful when HoldToExitVehicle is true: how long the hotkey
+    /// must be held before a release counts as a confirmed exit rather than
+    /// a cancelled attempt. Tune it to sit just under your game's own
+    /// hold-to-exit-vehicle duration, so holding slightly longer than that
+    /// doesn't cancel a successful in-game exit.
+    public float MinHoldToExitSeconds { get => _minHoldToExitSeconds; set => SetField(ref _minHoldToExitSeconds, value); }
 
     /// When true, MainViewModel mutes the source process's own Windows audio
     /// session on Start and unmutes it on Stop, so the raw source is never

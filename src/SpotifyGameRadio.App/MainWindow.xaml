@@ -130,9 +130,16 @@
                                                      ToolTip="Delay before the radio mutes after toggling 'out of vehicle', for games with an exit animation (e.g. Squad)." />
                             <TextBlock Text="Entering back &quot;in&quot; is always immediate." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
 
-                            <CheckBox Content="Hold to exit (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
+                            <CheckBox x:Name="HoldToExitCheck" Content="Hold to exit (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
                                       Margin="0,0,0,10"
                                       ToolTip="Off (default): tap the vehicle toggle hotkey once to exit, again to return. On: hold the key down to exit, release to return — avoids accidental exits/entries when the same key is reused for something else in a game." />
+
+                            <controls:LabeledSlider Label="Min hold to exit" Minimum="0.1" Maximum="3"
+                                                     SmallChange="0.1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                     Value="{Binding Profile.MinHoldToExitSeconds}" ValueFormat="{}{0:0.0} s"
+                                                     Margin="0,0,0,4" IsEnabled="{Binding IsChecked, ElementName=HoldToExitCheck}"
+                                                     ToolTip="Only used in hold-to-exit mode. Releasing the key before this much time has passed cancels the exit (back to 'in vehicle'). Releasing at or after it confirms the exit — set it just under your game's own hold-to-exit duration so holding slightly longer doesn't cancel a successful exit." />
+                            <TextBlock Text="Re-entry (releasing again once out) is always immediate." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
 
                             <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
                                       ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />
@@ -174,16 +181,24 @@
                             </Grid>
                             <TextBlock Text="Fires Recenter without alt-tabbing." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
 
-                            <controls:LabeledSlider Label="Mouse sensitivity" Minimum="0.01" Maximum="1.0"
-                                                     Value="{Binding Profile.MouseSensitivity}" ValueFormat="{}{0:0.00}"
-                                                     Margin="0,0,0,10" />
-                            <controls:LabeledSlider Label="Max yaw" Minimum="0" Maximum="180"
-                                                     Value="{Binding Profile.MaxYawDegrees}" ValueFormat="{}{0:0}°"
-                                                     Margin="0,0,0,10" />
-                            <controls:LabeledSlider Label="Max pitch" Minimum="0" Maximum="90"
-                                                     Value="{Binding Profile.MaxPitchDegrees}" ValueFormat="{}{0:0}°"
-                                                     Margin="0,0,0,4" />
-                            <TextBlock Text="Currently unused — vertical panning is disabled." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                            <Expander Header="Advanced" Margin="0,0,0,10">
+                                <StackPanel Margin="0,4,0,0">
+                                    <TextBlock Text="Calibration sets these automatically — only touch them if you need to override it."
+                                               Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                    <controls:LabeledSlider Label="Mouse sensitivity" Minimum="0.01" Maximum="1.0"
+                                                             Value="{Binding Profile.MouseSensitivity}" ValueFormat="{}{0:0.00}"
+                                                             Margin="0,0,0,10"
+                                                             ToolTip="Recalculated automatically from Max yaw whenever you calibrate, or whenever Max yaw changes afterwards. Set manually only to override that." />
+                                    <controls:LabeledSlider Label="Max yaw" Minimum="0" Maximum="180"
+                                                             Value="{Binding Profile.MaxYawDegrees}" ValueFormat="{}{0:0}°"
+                                                             Margin="0,0,0,10"
+                                                             ToolTip="The reference angle calibration uses — set this to roughly match your game's actual turn limit before calibrating. Also the live clamp on how far freelook can pan." />
+                                    <controls:LabeledSlider Label="Max pitch" Minimum="0" Maximum="90"
+                                                             Value="{Binding Profile.MaxPitchDegrees}" ValueFormat="{}{0:0}°"
+                                                             Margin="0,0,0,4" />
+                                    <TextBlock Text="Currently unused — vertical panning is disabled." Style="{StaticResource MutedText}" />
+                                </StackPanel>
+                            </Expander>
 
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>

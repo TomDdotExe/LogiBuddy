@@ -26,6 +26,8 @@ public class MainViewModel : INotifyPropertyChanged
     private TapHotkeyWatcher? _recenterHotkeyWatcher;
     private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
     private bool _isInVehicle = true;
+    private bool _vehicleExitConfirmed;
+    private DateTime _vehicleHotkeyPressedAt;
     private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
     private CalibrationSession? _calibrationSession;
     private TapHotkeyWatcher? _calibrateHotkeyWatcher;
@@ -429,14 +431,21 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     /// Fires on the vehicle-toggle hotkey's key-down edge. In tap-to-toggle
-    /// mode (default) this flips in/out of vehicle. In hold-to-exit mode this
-    /// always means "exiting" — OnVehicleToggleReleased is what returns to
-    /// "in vehicle".
+    /// mode (default) this flips in/out of vehicle. In hold-to-exit mode,
+    /// pressing while in the vehicle starts exiting; pressing while already
+    /// out (mid-exit or confirmed-out) just marks the start of what
+    /// OnVehicleToggleReleased will treat as the re-entry gesture.
     private void OnVehicleTogglePressed()
     {
         if (Profile.HoldToExitVehicle)
         {
-            EnterOutOfVehicle();
+            _vehicleHotkeyPressedAt = DateTime.UtcNow;
+            if (_isInVehicle)
+            {
+                _isInVehicle = false;
+                _vehicleExitConfirmed = false;
+                EnterOutOfVehicle();
+            }
             return;
         }
 
@@ -444,14 +453,36 @@ public class MainViewModel : INotifyPropertyChanged
         if (_isInVehicle) EnterInVehicle(); else EnterOutOfVehicle();
     }
 
-    /// Fires on the vehicle-toggle hotkey's key-up edge. Only meaningful in
-    /// hold-to-exit mode, where releasing the key returns to "in vehicle"
-    /// immediately (matching tap mode's "entering back in is always
-    /// immediate" behaviour). Ignored in tap-to-toggle mode.
+    /// Fires on the vehicle-toggle hotkey's key-up edge. Ignored in
+    /// tap-to-toggle mode. In hold-to-exit mode:
+    /// - Released before an exit is confirmed: if held less than
+    ///   Profile.MinHoldToExitSeconds, treat it as an aborted attempt (the
+    ///   in-game exit likely never registered either) and snap back to "in
+    ///   vehicle". Held at least that long, the exit is confirmed — release
+    ///   no longer cancels it, so the pending mute timer keeps running.
+    /// - Released after an exit is already confirmed: this is the re-entry
+    ///   gesture, always immediate (no hold-length check — entering back in
+    ///   was never the part that raced against the mute timer).
     private void OnVehicleToggleReleased()
     {
-        if (!Profile.HoldToExitVehicle) return;
+        if (!Profile.HoldToExitVehicle || _isInVehicle) return;
+
+        if (!_vehicleExitConfirmed)
+        {
+            var minHold = TimeSpan.FromSeconds(Math.Max(0f, Profile.MinHoldToExitSeconds));
+            if (DateTime.UtcNow - _vehicleHotkeyPressedAt >= minHold)
+            {
+                _vehicleExitConfirmed = true; // exit confirmed; release no longer cancels it
+                return;
+            }
+
+            _isInVehicle = true;
+            EnterInVehicle();
+            return;
+        }
+
         _isInVehicle = true;
+        _vehicleExitConfirmed = false;
         EnterInVehicle();
     }
 
@@ -700,6 +731,7 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = "Running";
 
             _isInVehicle = true;
+            _vehicleExitConfirmed = false;
             _vehicleExitTimer?.Stop();
             _vehicleExitTimer = null;
             // Skip auto-mute entirely when routing is also active: routing already
