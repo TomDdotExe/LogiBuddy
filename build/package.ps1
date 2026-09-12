@@ -84,6 +84,10 @@ the Apache License, Version 2.0. The full license text is in section A
 below. phonon.dll also statically links the libraries listed in section
 B, each under its own license.
 
+This product also bundles the Whisper.net managed library and the native
+whisper.cpp/ggml runtime binaries it wraps, both licensed under the MIT
+License. The full license text is in section C below.
+
 
 ================================================================================
 A. Steam Audio - Apache License 2.0
@@ -96,7 +100,64 @@ A. Steam Audio - Apache License 2.0
 B. Libraries linked into phonon.dll
 ================================================================================
 
-"@ + (Get-Content -LiteralPath $thirdPartyIn -Raw)
+"@ + (Get-Content -LiteralPath $thirdPartyIn -Raw) + @"
+
+
+================================================================================
+C. Whisper.net / whisper.cpp / ggml - MIT License
+================================================================================
+
+Whisper.net
+https://github.com/sandrohanea/whisper.net
+
+MIT License
+
+Copyright (c) Whisper.net contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+whisper.cpp / ggml
+https://github.com/ggml-org/whisper.cpp
+
+MIT License
+
+Copyright (c) whisper.cpp/ggml and Whisper.net contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"@
 $notice | Set-Content -LiteralPath (Join-Path $zipRoot 'THIRD-PARTY-NOTICES.txt') -Encoding UTF8
 
 Write-Host "== Compressing =="

@@ -27,6 +27,7 @@ public sealed class VoiceChatSession : IDisposable
     private readonly IMicrophoneCapture _mic;
     private readonly ISpeechToText _stt;
     private readonly Func<string> _vocabularyHint;
+    private readonly Func<string?> _deviceId;
     private CancellationTokenSource? _transcribeCts;
     private bool _disposed;
 
@@ -37,11 +38,12 @@ public sealed class VoiceChatSession : IDisposable
     public event Action<string>? PreviewReady;
     public event Action<string>? Failed;
 
-    public VoiceChatSession(IMicrophoneCapture mic, ISpeechToText stt, Func<string> vocabularyHint)
+    public VoiceChatSession(IMicrophoneCapture mic, ISpeechToText stt, Func<string> vocabularyHint, Func<string?> deviceId)
     {
         _mic = mic;
         _stt = stt;
         _vocabularyHint = vocabularyHint;
+        _deviceId = deviceId;
     }
 
     public void BeginRecording()
@@ -49,7 +51,7 @@ public sealed class VoiceChatSession : IDisposable
         if (State is VoiceChatState.Recording or VoiceChatState.Transcribing) return;
 
         Transcript = null;
-        _mic.Start(null);
+        _mic.Start(_deviceId());
         SetState(VoiceChatState.Recording);
     }
 

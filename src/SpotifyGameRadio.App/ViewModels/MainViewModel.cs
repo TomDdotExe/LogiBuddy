@@ -35,6 +35,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly CalibrationAnnouncer _announcer;
     private readonly VoiceModelStore _voiceModelStore = new();
     private VoiceChatSession? _voiceSession;
+    private LazyWhisperSpeechToText? _speechToText;
     private TapHotkeyWatcher? _voiceRecordWatcher;
     private TapHotkeyWatcher? _voiceConfirmWatcher;
     private TapHotkeyWatcher? _voiceDiscardWatcher;
@@ -175,10 +176,12 @@ public class MainViewModel : INotifyPropertyChanged
         // fail on a machine where routing isn't available at all.
         if (!_router.IsSupported && Profile.AutoRouteSource) Profile.AutoRouteSource = false;
 
+        _speechToText = new LazyWhisperSpeechToText(() => _voiceModelStore.ModelPath);
         _voiceSession = new VoiceChatSession(
             new SpotifyGameRadio.Core.Audio.MicrophoneCapture(),
-            CreateSpeechToText(),
-            () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary));
+            _speechToText,
+            () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary),
+            () => Profile.VoiceMicrophoneDeviceId);
         _voiceSession.StateChanged += OnVoiceStateChanged;
         _voiceSession.Failed += reason =>
         {
@@ -242,8 +245,6 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = $"Couldn't restore previous source routing: {ex.Message}";
         }
     }
-
-    private ISpeechToText CreateSpeechToText() => new LazyWhisperSpeechToText(() => _voiceModelStore.ModelPath);
 
     private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -335,7 +336,9 @@ public class MainViewModel : INotifyPropertyChanged
             .ToList();
         OnPropertyChanged(nameof(AvailableRenderDevices));
 
-        AvailableCaptureDevices = CaptureDeviceEnumerator.ListCaptureDevices();
+        AvailableCaptureDevices = new[] { new CaptureDeviceInfo("", "(system default)") }
+            .Concat(CaptureDeviceEnumerator.ListCaptureDevices())
+            .ToList();
         OnPropertyChanged(nameof(AvailableCaptureDevices));
     }
 
@@ -387,6 +390,13 @@ public class MainViewModel : INotifyPropertyChanged
             // Source process and routing still need a manual Stop/Start.
             RestartRequired = true;
         }
+
+        // Voice hotkey watchers are constructor-scoped (they work without the
+        // pipeline running), so they're re-wired unconditionally here rather
+        // than inside the _pipeline-is-not-null block above.
+        _voiceRecordWatcher?.SetHotkey(Profile.VoiceRecordHotkey);
+        _voiceConfirmWatcher?.SetHotkey(Profile.VoiceConfirmHotkey);
+        _voiceDiscardWatcher?.SetHotkey(Profile.VoiceDiscardHotkey);
     }
 
     /// Resolves the render-device id to route the source to: the profile's
@@ -648,8 +658,12 @@ public class MainViewModel : INotifyPropertyChanged
                     VoiceChatState.PreviewReady => _voiceSession?.Transcript ?? "",
                     _ => "",
                 });
-                string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Confirm";
-                string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0 ? "(unbound)" : "Discard";
+                string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0
+                    ? "(unbound)"
+                    : SpotifyGameRadio.App.Controls.HotkeyCaptureControl.VirtualKeyName(Profile.VoiceConfirmHotkey.VirtualKeyCode);
+                string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0
+                    ? "(unbound)"
+                    : SpotifyGameRadio.App.Controls.HotkeyCaptureControl.VirtualKeyName(Profile.VoiceDiscardHotkey.VirtualKeyCode);
                 _voiceOverlay.SetHint($"{confirmName} to copy · {discardName} to clear · hold Record again to redo");
                 _voiceOverlay.Show();
             });
@@ -1044,6 +1058,7 @@ public class MainViewModel : INotifyPropertyChanged
         _voiceConfirmWatcher?.Dispose();
         _voiceDiscardWatcher?.Dispose();
         _voiceSession?.Dispose();
+        _speechToText?.Dispose();
         _voiceOverlay?.Close();
     }
 
@@ -1060,10 +1075,14 @@ public class MainViewModel : INotifyPropertyChanged
 
         public LazyWhisperSpeechToText(Func<string> modelPath) => _modelPath = modelPath;
 
-        public Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
+        public async Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
         {
-            _inner ??= new WhisperSpeechToText(_modelPath());
-            return _inner.TranscribeAsync(pcm16kMono, vocabularyHint, ct);
+            // WhisperFactory.FromPath (inside the WhisperSpeechToText ctor) loads
+            // the ~488 MB model file synchronously — moved off the calling
+            // (UI) thread so first use doesn't freeze the app. The per-call
+            // ProcessAsync inference below is already async via Whisper.net.
+            _inner ??= await Task.Run(() => new WhisperSpeechToText(_modelPath()), ct);
+            return await _inner.TranscribeAsync(pcm16kMono, vocabularyHint, ct);
         }
 
         public void Dispose() => _inner?.Dispose();

@@ -20,6 +20,14 @@ public class VoiceModelStore
     private readonly string _expectedSha256;
     private readonly Func<string, CancellationToken, Task> _download;
 
+    // IsDownloaded streams and SHA256-hashes the whole (~488 MB) cached model
+    // file, which is far too slow to redo on every read (it's read on every
+    // record-hotkey press, plus twice more at window construction via XAML
+    // bindings). Cached after the first real check so at most one full hash
+    // pass happens per process lifetime; DownloadAsync updates it directly on
+    // success so a fresh download is reflected immediately.
+    private bool? _isDownloadedCache;
+
     public string ModelPath { get; }
 
     /// Real pinned model/hash, real HTTP download.
@@ -46,11 +54,17 @@ public class VoiceModelStore
     {
         get
         {
-            if (!File.Exists(ModelPath)) return false;
-            using var stream = File.OpenRead(ModelPath);
-            string actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            return actual == _expectedSha256.ToLowerInvariant();
+            _isDownloadedCache ??= ComputeIsDownloaded();
+            return _isDownloadedCache.Value;
         }
+    }
+
+    private bool ComputeIsDownloaded()
+    {
+        if (!File.Exists(ModelPath)) return false;
+        using var stream = File.OpenRead(ModelPath);
+        string actual = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        return actual == _expectedSha256.ToLowerInvariant();
     }
 
     public async Task DownloadAsync(IProgress<double> progress, CancellationToken ct)
@@ -69,6 +83,7 @@ public class VoiceModelStore
             }
 
             File.Move(tempPath, ModelPath, overwrite: true);
+            _isDownloadedCache = true;
             progress.Report(1.0);
         }
         finally

@@ -38,7 +38,7 @@ public class VoiceChatSessionTests
     private static VoiceChatSession CreateSession(
         FakeMicrophoneCapture mic, FakeSpeechToText stt, out List<VoiceChatState> states, out List<string> previews, out List<string> failures)
     {
-        var session = new VoiceChatSession(mic, stt, () => "");
+        var session = new VoiceChatSession(mic, stt, () => "", () => null);
         var capturedStates = new List<VoiceChatState>();
         var capturedPreviews = new List<string>();
         var capturedFailures = new List<string>();
@@ -195,7 +195,7 @@ public class VoiceChatSessionTests
     [Fact]
     public void Dispose_IsSafeToCallTwice()
     {
-        var session = new VoiceChatSession(new FakeMicrophoneCapture(), new FakeSpeechToText(), () => "");
+        var session = new VoiceChatSession(new FakeMicrophoneCapture(), new FakeSpeechToText(), () => "", () => null);
         session.Dispose();
         session.Dispose(); // must not throw
     }

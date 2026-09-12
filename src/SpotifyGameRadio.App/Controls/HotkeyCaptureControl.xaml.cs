@@ -88,7 +88,7 @@ public partial class HotkeyCaptureControl : UserControl
         UpdateLabel();
     }
 
-    private static string VirtualKeyName(int vk) => vk switch
+    internal static string VirtualKeyName(int vk) => vk switch
     {
         0x01 => "Mouse Left",
         0x02 => "Mouse Right",
