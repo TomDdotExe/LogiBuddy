@@ -117,6 +117,8 @@ public class MainViewModel : INotifyPropertyChanged
 
     public bool VoiceModelReady => _voiceModelStore.IsDownloaded;
 
+    public bool VoiceModelNotReady => !_voiceModelStore.IsDownloaded;
+
     private bool _voiceModelDownloading;
     public bool VoiceModelDownloading
     {
@@ -354,6 +356,7 @@ public class MainViewModel : INotifyPropertyChanged
         {
             VoiceModelDownloading = false;
             OnPropertyChanged(nameof(VoiceModelReady));
+            OnPropertyChanged(nameof(VoiceModelNotReady));
         }
     }
 

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
         xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
-        Title="Spotify Game Radio" Width="1040" Height="960" MinWidth="960" MinHeight="700"
+        Title="Spotify Game Radio" Width="1040" Height="1150" MinWidth="960" MinHeight="700"
         Background="{StaticResource BgBrush}">
     <Window.DataContext>
         <local:MainViewModel />
@@ -236,6 +236,69 @@
                                     </Border>
                                 </StackPanel>
                             </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Voice Chat" Style="{StaticResource SectionHeaderText}" />
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Record hotkey" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.VoiceRecordHotkey, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Hold to record, release to transcribe." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Confirm hotkey" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.VoiceConfirmHotkey, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Copies the preview to the clipboard — paste it yourself." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Discard hotkey" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.VoiceDiscardHotkey, Mode=TwoWay}" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Microphone:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <ComboBox Width="220" ItemsSource="{Binding AvailableCaptureDevices}"
+                                          SelectedValuePath="Id" SelectedValue="{Binding Profile.VoiceMicrophoneDeviceId}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding FriendlyName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <TextBlock Text="Custom vocabulary" Style="{StaticResource RowLabelText}" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding Profile.VoiceCustomVocabulary, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True" TextWrapping="Wrap" Height="70" Margin="0,0,0,10"
+                                     ToolTip="Comma or newline separated. Biases transcription toward these terms — add callsigns and jargon specific to your unit/game." />
+
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding VoiceModelNotReady, Converter={StaticResource BoolToVis}}">
+                                <Button Content="Download voice model" Command="{Binding DownloadVoiceModelCommand}" />
+                                <TextBlock Text="{Binding VoiceModelDownloadProgress, StringFormat=' {0:P0}'}" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" Visibility="{Binding VoiceModelDownloading, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                            <TextBlock Text="Voice model ready." Style="{StaticResource MutedText}"
+                                       Visibility="{Binding VoiceModelReady, Converter={StaticResource BoolToVis}}" />
                         </StackPanel>
                     </Border>
 
