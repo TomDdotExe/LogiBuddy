@@ -72,11 +72,16 @@ does.
 
 ## Getting started (end users)
 
-1. Download the latest release ZIP from the
-   [Releases page](https://github.com/TomDdotExe/LogiBuddy/releases).
-2. Unzip it anywhere and run `LogiBuddy.exe`.
-3. Follow the first-time setup below (or the fuller walkthrough in
-   [`docs/SETUP.md`](docs/SETUP.md)).
+Grab either from the [Releases page](https://github.com/TomDdotExe/LogiBuddy/releases):
+
+- **Installer** (`LogiBuddy-vX.Y.Z-win-x64-setup.exe`) — installs to
+  `%LocalAppData%\Programs\LogiBuddy` with a Start Menu entry and a
+  proper uninstaller. No admin rights needed.
+- **Portable ZIP** (`LogiBuddy-vX.Y.Z-win-x64.zip`) — unzip anywhere and
+  run `LogiBuddy.exe` directly, no install step.
+
+Then follow the first-time setup below (or the fuller walkthrough in
+[`docs/SETUP.md`](docs/SETUP.md)).
 
 ## First-time setup
 

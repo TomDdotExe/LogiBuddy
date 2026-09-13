@@ -28,6 +28,7 @@ Thumbs.db
 # Release packaging
 build/.cache/
 build/.staging/
+build/.staging-installer/
 build/dist/
 build/third-party/
 
