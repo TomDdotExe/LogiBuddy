@@ -72,7 +72,8 @@
                             <StackPanel IsEnabled="{Binding IsRoutingSupported}">
                                 <StackPanel Orientation="Horizontal">
                                     <CheckBox x:Name="AutoRouteCheck" Content="Auto-route source to a silent device"
-                                              IsChecked="{Binding Profile.AutoRouteSource}" />
+                                              IsChecked="{Binding Profile.AutoRouteSource}"
+                                              ToolTip="Without this (or routing the source manually), you'll hear the raw source and the processed radio playing at once, overlapping — muting the source instead doesn't help, since it also silences this app's own capture. Requires a virtual audio cable (VB-Audio Virtual Cable, VoiceMeeter, etc.) installed." />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <ComboBox Width="220"

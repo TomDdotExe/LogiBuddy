@@ -38,9 +38,12 @@ feeling is worth the setup effort.
 - **Vehicle toggle** — simulates getting in/out of a vehicle: tap (or hold)
   a hotkey to mute/un-mute the radio after a configurable delay, matching
   games that play an exit/enter-vehicle animation.
-- **Source routing** — optionally routes the source app's own Windows audio
-  output to a silent virtual device while running, so you hear only the
-  processed radio and not the raw source playing underneath it.
+- **Source routing** — routes the source app's own Windows audio output to
+  a silent virtual device while running, so you hear only the processed
+  radio and not the raw source playing underneath it. This is not a nice-to-have:
+  without it, you hear both the unprocessed source and the processed radio
+  overlapping at once, which defeats the entire effect (see
+  [Requirements](#requirements)).
 - **Voice chat transcription** — hold a hotkey to record from your
   microphone, release to transcribe locally (Whisper) and copy the result
   to your clipboard automatically, with a custom-vocabulary list to bias
@@ -66,9 +69,18 @@ does.
     [Building from source](#building-from-source) below).
   - Without it, LogiBuddy still runs, just with simple stereo panning
     instead of true HRTF.
-- **Optional** — a virtual audio cable (VB-Audio Virtual Cable, VoiceMeeter,
-  etc.) and Windows 11, only if you want "auto-route source to a silent
-  device" instead of hearing the raw source underneath the processed radio.
+- **A virtual audio cable (VB-Audio Virtual Cable, VoiceMeeter, etc.) — required
+  for the intended experience, not optional.** Without one, you hear the raw
+  source *and* the processed radio playing at once, overlapping — muting the
+  source instead is not a workaround, since LogiBuddy captures that same
+  session, so muting it also silences the radio. A virtual cable gives the
+  source somewhere silent to go instead.
+  - LogiBuddy's own "auto-route source to a silent device" automates picking
+    the cable and routing to it, but that automation needs **Windows 11**
+    (an undocumented API not available on Windows 10).
+  - On Windows 10, route the source manually instead: Windows Settings →
+    System → Sound → "App volume and device preferences" → set the source
+    app's output to the virtual cable. One-time setup, works every launch.
 
 ## Getting started (end users)
 

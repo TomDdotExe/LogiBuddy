@@ -26,6 +26,12 @@
   rate, which `ResamplingCaptureService` converts up to 48kHz before it
   reaches the pipeline. It is a zero-copy passthrough when capture is
   already 48kHz, so there is no cost on the common path.
+- **A virtual audio cable (VB-Audio Virtual Cable, VoiceMeeter, etc.) —
+  required for the app to be usable as intended, not optional.** Without
+  one there is no way to stop the raw source and the processed radio
+  from both playing at once, overlapping — see
+  [Source audio routing](#source-audio-routing) below for why muting the
+  source is not a substitute.
 
 ## Running
 
@@ -80,14 +86,21 @@ source-mute setting.
 
 ## Source audio routing
 
-To stop hearing the raw source (e.g. Spotify) alongside the processed
-radio, the app routes the source app's output to a silent render
-endpoint while running.
+Without this, LogiBuddy is not really usable as intended: you'd hear the
+raw source (e.g. Spotify) and the processed radio playing at once,
+overlapping — muting the source instead does not work (see
+[Source audio muting](#source-audio-muting) below for why). Routing the
+source app's output to a silent render endpoint while running is the
+only way to hear just the processed radio.
 
-- Requires Windows 11 and a virtual audio device (VB-Audio Virtual
-  Cable, VoiceMeeter, etc.). On Windows 10 the option is unavailable
-  and Start is blocked while "Auto-route" is ticked — untick it and
-  route the source manually in Windows Sound settings instead.
+- "Auto-route source to a silent device" **automates** this, but the
+  automation itself requires **Windows 11** and a virtual audio device
+  (VB-Audio Virtual Cable, VoiceMeeter, etc.) installed. On Windows 10
+  the option is unavailable and Start is blocked while "Auto-route" is
+  ticked — untick it and route the source manually instead: Windows
+  Settings → System → Sound → "App volume and device preferences" → set
+  the source app's output to the virtual cable. This is a one-time
+  setup per source app; Windows remembers it across launches.
 - Leave the device dropdown on "(auto-detect virtual cable)" to have one
   found at Start, or pick a device explicitly. The choice is saved when
   you click Save Profile.
@@ -99,13 +112,14 @@ endpoint while running.
 
 ## Source audio muting
 
-"Auto-mute source audio on Start" is a second, independent way to avoid
-hearing the raw source — but unlike routing, it is **off by default** and
-should stay off unless you understand the tradeoff: it mutes the source
-app's own Windows audio session, and since this app captures that same
-session's audio to build the radio, muting it also silences the radio
-itself. It is only useful if you are not relying on this app's capture of
-that source (an edge case), and it is automatically skipped whenever
-"Auto-route source to a silent device" is enabled, since routing already
-solves the same problem without this conflict. Prefer routing (or the
-pre-existing manual mixer-mute) for the common case.
+"Auto-mute source audio on Start" is **not** an alternative to routing,
+despite sounding like one — it mutes the source app's own Windows audio
+session, and since this app captures that same session's audio to build
+the radio, muting it also silences the radio itself. The same is true of
+muting the source manually in the Windows Volume Mixer: it's the same
+underlying session mute, so it kills LogiBuddy's own capture too. There
+is no mute-based workaround — routing (via a virtual cable) is the only
+way to avoid hearing the raw source. This toggle is off by default and
+is only useful in the edge case where you don't need this app's capture
+of that source at all; it is automatically skipped whenever "Auto-route
+source to a silent device" is enabled.
