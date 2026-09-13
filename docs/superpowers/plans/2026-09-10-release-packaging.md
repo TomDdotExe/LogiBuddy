@@ -18,8 +18,8 @@
 - **Assembly version floor:** `<Version>0.1.0</Version>` in the App csproj; `package.ps1` overrides it per release via `-p:Version`.
 - **Steam Audio pinned to 4.8.1.** Archive URL exactly: `https://github.com/ValveSoftware/steam-audio/releases/download/v4.8.1/steamaudio_4.8.1.zip`
 - **Version argument regex:** `^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$` — reject anything else before doing work.
-- **ZIP filename:** `SpotifyGameRadio-v<Version>-win-x64.zip`, written to `build/dist/`.
-- **ZIP root contents:** a `SpotifyGameRadio/` folder (the full publish output, with `phonon.dll` next to the exe), `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`.
+- **ZIP filename:** `LogiBuddy-v<Version>-win-x64.zip`, written to `build/dist/`.
+- **ZIP root contents:** a `LogiBuddy/` folder (the full publish output, with `phonon.dll` next to the exe), `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`.
 - **License compliance:** the Steam Audio `LICENSE.md` text MUST be shipped in `THIRD-PARTY-NOTICES.txt`. Fetch hard-fails if it cannot extract the license.
 - **Every hash comparison is lowercase-normalised and any mismatch is a hard `throw`** (no silent fallback).
 - Scripts set `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'`.
@@ -30,7 +30,7 @@
 
 **Files:**
 - Modify: `.gitignore` (append)
-- Modify: `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj` (add `<Version>` to the existing `<PropertyGroup>`)
+- Modify: `src/LogiBuddy.App/LogiBuddy.App.csproj` (add `<Version>` to the existing `<PropertyGroup>`)
 - Modify: `docs/SETUP.md` (replace the manual `phonon.dll` requirement bullet)
 
 **Interfaces:**
@@ -50,7 +50,7 @@ build/dist/
 build/third-party/
 
 # Fetched native binary (see build/fetch-phonon.ps1)
-src/SpotifyGameRadio.App/runtimes/
+src/LogiBuddy.App/runtimes/
 
 # Claude Code local state
 .claude/
@@ -58,7 +58,7 @@ src/SpotifyGameRadio.App/runtimes/
 
 - [ ] **Step 2: Add the version floor to the csproj**
 
-In `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`, add a `<Version>` line to the existing `<PropertyGroup>` that already contains `<OutputType>WinExe</OutputType>`:
+In `src/LogiBuddy.App/LogiBuddy.App.csproj`, add a `<Version>` line to the existing `<PropertyGroup>` that already contains `<OutputType>WinExe</OutputType>`:
 
 ```xml
   <PropertyGroup>
@@ -84,7 +84,7 @@ In `docs/SETUP.md`, under `## Requirements`, replace the entire bullet that begi
   - **Developers:** run `./build/fetch-phonon.ps1` once. It downloads the
     pinned Steam Audio 4.8.1 release, verifies its checksum, and places
     the DLL at
-    `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`.
+    `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll`.
   Without the DLL the app still runs but falls back to simple stereo
   panning instead of true HRTF. The 4.x API is required — the project's
   native struct layouts were written against it.
@@ -94,7 +94,7 @@ In `docs/SETUP.md`, under `## Requirements`, replace the entire bullet that begi
 
 Run:
 ```
-dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj -c Debug --nologo
+dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj -c Debug --nologo
 ```
 Expected: `Build succeeded`, 0 errors. (A missing-`phonon.dll` warning is fine — the `<None>` item is conditional.)
 
@@ -102,12 +102,12 @@ Run:
 ```
 git status --porcelain
 ```
-Expected: shows `.gitignore`, the `.csproj`, and `docs/SETUP.md` as modified. Does **not** list `.claude/` or `src/SpotifyGameRadio.App/runtimes/` any more.
+Expected: shows `.gitignore`, the `.csproj`, and `docs/SETUP.md` as modified. Does **not** list `.claude/` or `src/LogiBuddy.App/runtimes/` any more.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .gitignore src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj docs/SETUP.md
+git add .gitignore src/LogiBuddy.App/LogiBuddy.App.csproj docs/SETUP.md
 git commit -m "$(cat <<'EOF'
 build: repo prep for release packaging (gitignore, version floor, SETUP.md)
 
@@ -127,7 +127,7 @@ EOF
 **Interfaces:**
 - Consumes: the `.gitignore` entries from Task 1 (so its downloads/outputs stay untracked).
 - Produces:
-  - `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll` (the pinned build)
+  - `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll` (the pinned build)
   - `build/third-party/steam-audio-LICENSE.md` (verbatim Steam Audio license)
   - Two pinned constants that `package.ps1` (Task 3) relies on by name: `$SteamAudioVersion` and `$PhononDllSha256`.
 - Behaviour contract: exit 0 and print `phonon.dll already present ...` when the target DLL already matches `$PhononDllSha256`; otherwise download → verify archive hash → extract DLL + license → verify DLL hash; any mismatch or missing entry is a hard `throw` (non-zero exit).
@@ -140,7 +140,7 @@ Create `build/fetch-phonon.ps1`:
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Ensure src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll is the
+  Ensure src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll is the
   pinned Steam Audio build. Idempotent; performs no network I/O once the DLL
   is in place. Also extracts Steam Audio's LICENSE.md for THIRD-PARTY-NOTICES.
 .PARAMETER Force
@@ -165,7 +165,7 @@ $PhononDllSha256   = 'REPLACE_DLL_SHA256'
 # ----------------------------------------------------------------------
 
 $repoRoot   = Split-Path -Parent $PSScriptRoot
-$targetDll  = Join-Path $repoRoot 'src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll'
+$targetDll  = Join-Path $repoRoot 'src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll'
 $licenseOut = Join-Path $repoRoot 'build/third-party/steam-audio-LICENSE.md'
 if (-not $CacheDir) { $CacheDir = Join-Path $repoRoot 'build/.cache' }
 $archivePath = Join-Path $CacheDir 'steamaudio_4.8.1.zip'
@@ -271,7 +271,7 @@ Expected: prints only `phonon.dll already present (Steam Audio 4.8.1).` and exit
 
 Confirm the artifacts exist:
 ```
-Get-FileHash -Algorithm SHA256 src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll
+Get-FileHash -Algorithm SHA256 src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll
 Test-Path build/third-party/steam-audio-LICENSE.md
 ```
 Expected: hash equals `$PhononDllSha256`; `Test-Path` prints `True`.
@@ -281,7 +281,7 @@ Expected: hash equals `$PhononDllSha256`; `Test-Path` prints `True`.
 Run:
 ```
 Set-Content -LiteralPath build/.cache/steamaudio_4.8.1.zip -Value 'corrupt' -NoNewline
-Remove-Item src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll
+Remove-Item src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll
 pwsh -File build/fetch-phonon.ps1
 ```
 Expected: it re-downloads (cache hash no longer matches), then succeeds — OR if you also block the network, it throws `Archive SHA256 mismatch` and deletes the bad file. Either way it never extracts from a bad archive. Re-run once more to leave the DLL back in place:
@@ -317,14 +317,14 @@ EOF
 
 **Interfaces:**
 - Consumes: `build/fetch-phonon.ps1` (invoked as `& $fetch`), its `$PhononDllSha256` value (duplicated here with a sync comment), `build/third-party/steam-audio-LICENSE.md`, `docs/SETUP.md`, the App csproj.
-- Produces: `build/dist/SpotifyGameRadio-v<Version>-win-x64.zip` and prints its path, size, and SHA256.
+- Produces: `build/dist/LogiBuddy-v<Version>-win-x64.zip` and prints its path, size, and SHA256.
 
 - [ ] **Step 1: Write `build/templates/README.txt`**
 
 Create `build/templates/README.txt` (the `{{VERSION}}` token is substituted by `package.ps1`):
 
 ```
-Spotify Game Radio v{{VERSION}}
+LogiBuddy v{{VERSION}}
 ==============================
 
 WHAT IT IS
@@ -340,7 +340,7 @@ REQUIREMENTS
 
 RUNNING
   1. Unzip this folder anywhere (for example, your Desktop).
-  2. Run SpotifyGameRadio.exe inside the SpotifyGameRadio folder.
+  2. Run LogiBuddy.exe inside the LogiBuddy folder.
   3. See SETUP.md for first-time configuration.
 
 OPTIONAL: SOURCE ROUTING
@@ -386,7 +386,7 @@ if (-not $OutputDir) { $OutputDir = Join-Path $repoRoot 'build/dist' }
 $staging   = Join-Path $repoRoot 'build/.staging'
 $appOut    = Join-Path $staging 'app'
 $zipRoot   = Join-Path $staging 'zip'
-$proj      = Join-Path $repoRoot 'src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj'
+$proj      = Join-Path $repoRoot 'src/LogiBuddy.App/LogiBuddy.App.csproj'
 $fetch     = Join-Path $PSScriptRoot 'fetch-phonon.ps1'
 $licenseIn = Join-Path $repoRoot 'build/third-party/steam-audio-LICENSE.md'
 $readmeTpl = Join-Path $PSScriptRoot 'templates/README.txt'
@@ -421,8 +421,8 @@ if ($dllHash -ne $PhononDllSha256.ToLowerInvariant()) {
 }
 
 Write-Host "== Assembling ZIP tree =="
-New-Item -ItemType Directory -Force -Path (Join-Path $zipRoot 'SpotifyGameRadio') | Out-Null
-Copy-Item -Path (Join-Path $appOut '*') -Destination (Join-Path $zipRoot 'SpotifyGameRadio') -Recurse
+New-Item -ItemType Directory -Force -Path (Join-Path $zipRoot 'LogiBuddy') | Out-Null
+Copy-Item -Path (Join-Path $appOut '*') -Destination (Join-Path $zipRoot 'LogiBuddy') -Recurse
 
 (Get-Content -LiteralPath $readmeTpl -Raw).Replace('{{VERSION}}', $Version) |
     Set-Content -LiteralPath (Join-Path $zipRoot 'README.txt') -Encoding UTF8
@@ -442,7 +442,7 @@ $notice | Set-Content -LiteralPath (Join-Path $zipRoot 'THIRD-PARTY-NOTICES.txt'
 
 Write-Host "== Compressing =="
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$zipPath = Join-Path $OutputDir "SpotifyGameRadio-v$Version-win-x64.zip"
+$zipPath = Join-Path $OutputDir "LogiBuddy-v$Version-win-x64.zip"
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Compress-Archive -Path (Join-Path $zipRoot '*') -DestinationPath $zipPath
 
@@ -464,21 +464,21 @@ Create `build/README.md`:
 ```markdown
 # build/
 
-Release packaging for Spotify Game Radio.
+Release packaging for LogiBuddy.
 
 ## Cutting a release
 
     ./build/package.ps1 -Version 1.0.0
 
-Produces `build/dist/SpotifyGameRadio-v1.0.0-win-x64.zip` (portable,
+Produces `build/dist/LogiBuddy-v1.0.0-win-x64.zip` (portable,
 framework-dependent) and prints the zip's size and SHA256.
 
 ## Scripts
 
 | Script | Does |
 | --- | --- |
-| `fetch-phonon.ps1` | Downloads the pinned Steam Audio release, verifies its SHA256, extracts `phonon.dll` to `src/SpotifyGameRadio.App/runtimes/win-x64/native/` and `LICENSE.md` to `build/third-party/`. Idempotent. |
-| `package.ps1` | Runs `fetch-phonon.ps1`, `dotnet publish` (framework-dependent, no RID), asserts `phonon.dll` is in the output, assembles the ZIP tree (`SpotifyGameRadio/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`), compresses it. |
+| `fetch-phonon.ps1` | Downloads the pinned Steam Audio release, verifies its SHA256, extracts `phonon.dll` to `src/LogiBuddy.App/runtimes/win-x64/native/` and `LICENSE.md` to `build/third-party/`. Idempotent. |
+| `package.ps1` | Runs `fetch-phonon.ps1`, `dotnet publish` (framework-dependent, no RID), asserts `phonon.dll` is in the output, assembles the ZIP tree (`LogiBuddy/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`), compresses it. |
 
 `package.ps1 -SkipPhonon` skips the fetch when the DLL is already in place.
 
@@ -493,7 +493,7 @@ dummy value and run `fetch-phonon.ps1` twice — it prints the real
 ## Ignored paths
 
 `build/.cache/`, `build/.staging/`, `build/dist/`, `build/third-party/`,
-and `src/SpotifyGameRadio.App/runtimes/` are all gitignored — the fetched
+and `src/LogiBuddy.App/runtimes/` are all gitignored — the fetched
 binary and build transients are never committed.
 ```
 
@@ -511,25 +511,25 @@ Run:
 ```
 pwsh -File build/package.ps1 -Version 0.1.0-test
 ```
-Expected: prints `== Fetching phonon.dll ==` (→ `already present`), `== Publishing ==`, `== Assembling ZIP tree ==`, `== Compressing ==`, then `Built:`, `Size:`, `SHA256:` lines. Exit 0. A `build/dist/SpotifyGameRadio-v0.1.0-test-win-x64.zip` file exists.
+Expected: prints `== Fetching phonon.dll ==` (→ `already present`), `== Publishing ==`, `== Assembling ZIP tree ==`, `== Compressing ==`, then `Built:`, `Size:`, `SHA256:` lines. Exit 0. A `build/dist/LogiBuddy-v0.1.0-test-win-x64.zip` file exists.
 
 - [ ] **Step 7: Inspect the ZIP contents**
 
 Run:
 ```
-Expand-Archive -Path build/dist/SpotifyGameRadio-v0.1.0-test-win-x64.zip -DestinationPath build/.staging/verify -Force
+Expand-Archive -Path build/dist/LogiBuddy-v0.1.0-test-win-x64.zip -DestinationPath build/.staging/verify -Force
 Get-ChildItem build/.staging/verify
-Get-ChildItem build/.staging/verify/SpotifyGameRadio/phonon.dll
+Get-ChildItem build/.staging/verify/LogiBuddy/phonon.dll
 Select-String -Path build/.staging/verify/README.txt -Pattern 'v0.1.0-test' -SimpleMatch
 Select-String -Path build/.staging/verify/THIRD-PARTY-NOTICES.txt -Pattern 'MIT' -SimpleMatch
 ```
-Expected: the verify folder holds `SpotifyGameRadio/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`. `phonon.dll` exists inside `SpotifyGameRadio/`. `README.txt` contains `v0.1.0-test`. `THIRD-PARTY-NOTICES.txt` contains the word `MIT` (license text present).
+Expected: the verify folder holds `LogiBuddy/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`. `phonon.dll` exists inside `LogiBuddy/`. `README.txt` contains `v0.1.0-test`. `THIRD-PARTY-NOTICES.txt` contains the word `MIT` (license text present).
 
 - [ ] **Step 8: Smoke-test the unzipped app**
 
 Run:
 ```
-build/.staging/verify/SpotifyGameRadio/SpotifyGameRadio.exe
+build/.staging/verify/LogiBuddy/LogiBuddy.exe
 ```
 (Have Spotify or a browser playing audio first.) Expected: the window opens; after selecting a source and clicking Start, `%TEMP%\sgr-capture-debug.log` shows a `capture started` line and spatialisation uses HRTF — the log does **not** report the `StereoPanSpatializer` panning fallback. Close the app.
 
@@ -545,7 +545,7 @@ build: add package.ps1 — portable release zip with bundled phonon.dll
 
 Runs fetch-phonon.ps1, publishes framework-dependent, guards the phonon.dll
 copy, assembles README.txt/SETUP.md/THIRD-PARTY-NOTICES.txt, and zips to
-build/dist/SpotifyGameRadio-v<Version>-win-x64.zip.
+build/dist/LogiBuddy-v<Version>-win-x64.zip.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_019E1KP9g2hiXfAZMVNTrXUN
@@ -572,7 +572,7 @@ EOF
 | Extract + ship Steam Audio LICENSE | Task 2 Step 1 (licEntry, hard-fail if absent); Task 3 Step 2 (THIRD-PARTY-NOTICES.txt) |
 | `package.ps1` signature incl. `-SkipPhonon` | Task 3 Step 2 |
 | Publish guard: phonon.dll present + hash match | Task 3 Step 2 |
-| ZIP tree: `SpotifyGameRadio/`, README.txt, SETUP.md, THIRD-PARTY-NOTICES.txt | Task 3 Step 2, verified Step 7 |
+| ZIP tree: `LogiBuddy/`, README.txt, SETUP.md, THIRD-PARTY-NOTICES.txt | Task 3 Step 2, verified Step 7 |
 | README.txt `{{VERSION}}` substitution + content | Task 3 Steps 1-2 |
 | Print zip path/size/SHA256 | Task 3 Step 2 |
 | csproj `<Version>0.1.0</Version>` floor | Task 1 Step 2 |
@@ -587,4 +587,4 @@ No gaps.
 
 **Placeholder scan:** `REPLACE_ARCHIVE_SHA256` / `REPLACE_DLL_SHA256` are intentional — Task 2 Steps 2-3 and Task 3 Step 3 are explicit bootstrap steps that replace them with values captured from a real download. Not plan placeholders.
 
-**Type/name consistency:** `$SteamAudioVersion`, `$ArchiveUrl`, `$ArchiveSha256`, `$PhononDllSha256`, `Get-Sha256`, `$targetDll`, `$licenseOut` consistent across both scripts. `$PhononDllSha256` is deliberately duplicated in `package.ps1` with a "keep in sync" comment (Task 3 interface block notes this). ZIP name `SpotifyGameRadio-v<Version>-win-x64.zip` identical in Global Constraints, Task 3 Step 2, and verification steps. Zip-root folder name `SpotifyGameRadio/` consistent.
+**Type/name consistency:** `$SteamAudioVersion`, `$ArchiveUrl`, `$ArchiveSha256`, `$PhononDllSha256`, `Get-Sha256`, `$targetDll`, `$licenseOut` consistent across both scripts. `$PhononDllSha256` is deliberately duplicated in `package.ps1` with a "keep in sync" comment (Task 3 interface block notes this). ZIP name `LogiBuddy-v<Version>-win-x64.zip` identical in Global Constraints, Task 3 Step 2, and verification steps. Zip-root folder name `LogiBuddy/` consistent.

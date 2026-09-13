@@ -1,10 +1,10 @@
-# Spotify Game Radio Implementation Plan
+# LogiBuddy Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a Windows desktop app that captures a user-selected process's audio, runs it through a radio-style DSP chain, and spatializes it via HRTF so it rotates correctly when the player holds a freelook hotkey and moves the mouse in-game.
 
-**Architecture:** A .NET 8 solution with a UI-free `SpotifyGameRadio.Core` class library (DSP, tracking, spatialization, audio I/O, config) and a `SpotifyGameRadio.App` WPF project that composes those pieces and exposes them via a single window. Audio flows through one real-time callback thread: capture → mono downmix → `RadioEffectChain` → `ISpatializer` → output. `FreelookTracker` runs off a background hook thread and only ever writes one lock-free yaw/pitch value that the audio thread reads per block.
+**Architecture:** A .NET 8 solution with a UI-free `LogiBuddy.Core` class library (DSP, tracking, spatialization, audio I/O, config) and a `LogiBuddy.App` WPF project that composes those pieces and exposes them via a single window. Audio flows through one real-time callback thread: capture → mono downmix → `RadioEffectChain` → `ISpatializer` → output. `FreelookTracker` runs off a background hook thread and only ever writes one lock-free yaw/pitch value that the audio thread reads per block.
 
 **Tech Stack:** .NET 8, WPF, NAudio (WASAPI device loopback + render + device enumeration), raw Win32/COM interop for per-process WASAPI loopback (not covered by NAudio), Steam Audio (native `phonon.dll`, MIT-licensed) via P/Invoke for HRTF, xUnit for tests.
 
@@ -24,10 +24,10 @@
 ## File Structure
 
 ```
-SpotifyGameRadio.sln
+LogiBuddy.sln
 src/
-  SpotifyGameRadio.Core/
-    SpotifyGameRadio.Core.csproj
+  LogiBuddy.Core/
+    LogiBuddy.Core.csproj
     Config/
       RadioProfile.cs
       FreelookHotkey.cs
@@ -59,8 +59,8 @@ src/
       WasapiAudioOutput.cs
     Pipeline/
       RadioPipeline.cs
-  SpotifyGameRadio.App/
-    SpotifyGameRadio.App.csproj
+  LogiBuddy.App/
+    LogiBuddy.App.csproj
     App.xaml / App.xaml.cs
     MainWindow.xaml / MainWindow.xaml.cs
     ViewModels/
@@ -69,8 +69,8 @@ src/
     Controls/
       SourcePositionCanvas.xaml / SourcePositionCanvas.xaml.cs
 tests/
-  SpotifyGameRadio.Core.Tests/
-    SpotifyGameRadio.Core.Tests.csproj
+  LogiBuddy.Core.Tests/
+    LogiBuddy.Core.Tests.csproj
     Config/
       ConfigStoreTests.cs
     Dsp/
@@ -86,22 +86,22 @@ docs/
   SETUP.md
 ```
 
-Native binaries (`phonon.dll` and its dependencies) live in `src/SpotifyGameRadio.App/runtimes/win-x64/native/` and are copied to output on build.
+Native binaries (`phonon.dll` and its dependencies) live in `src/LogiBuddy.App/runtimes/win-x64/native/` and are copied to output on build.
 
 ---
 
 ### Task 1: Solution scaffolding, RadioProfile, and ConfigStore
 
 **Files:**
-- Create: `SpotifyGameRadio.sln`
-- Create: `src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj`
-- Create: `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
-- Create: `tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
-- Create: `src/SpotifyGameRadio.Core/Config/FreelookHotkey.cs`
-- Create: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Create: `src/SpotifyGameRadio.Core/Config/IConfigStore.cs`
-- Create: `src/SpotifyGameRadio.Core/Config/ConfigStore.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Create: `LogiBuddy.sln`
+- Create: `src/LogiBuddy.Core/LogiBuddy.Core.csproj`
+- Create: `src/LogiBuddy.App/LogiBuddy.App.csproj`
+- Create: `tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
+- Create: `src/LogiBuddy.Core/Config/FreelookHotkey.cs`
+- Create: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Create: `src/LogiBuddy.Core/Config/IConfigStore.cs`
+- Create: `src/LogiBuddy.Core/Config/ConfigStore.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Produces: `RadioProfile` (POCO, all fields below), `FreelookHotkey { int VirtualKeyCode }`, `IConfigStore.ListProfiles() -> IReadOnlyList<string>`, `IConfigStore.Load(string name) -> RadioProfile`, `IConfigStore.Save(RadioProfile profile) -> void`, `IConfigStore.Delete(string name) -> void`, `ConfigStore(string directoryOverride = null)`.
@@ -109,24 +109,24 @@ Native binaries (`phonon.dll` and its dependencies) live in `src/SpotifyGameRadi
 - [ ] **Step 1: Create the solution and projects**
 
 ```bash
-cd "D:/Freelance Work/SpotifyGameRadio"
-dotnet new sln -n SpotifyGameRadio
-dotnet new classlib -n SpotifyGameRadio.Core -o src/SpotifyGameRadio.Core -f net8.0
-dotnet new wpf -n SpotifyGameRadio.App -o src/SpotifyGameRadio.App -f net8.0-windows
-dotnet new xunit -n SpotifyGameRadio.Core.Tests -o tests/SpotifyGameRadio.Core.Tests -f net8.0
-dotnet sln add src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj
-dotnet sln add src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj
-dotnet sln add tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj
-dotnet add src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj reference src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj
-dotnet add tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj reference src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj
-dotnet add src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj package NAudio
-rm src/SpotifyGameRadio.Core/Class1.cs
+cd "D:/Freelance Work/LogiBuddy"
+dotnet new sln -n LogiBuddy
+dotnet new classlib -n LogiBuddy.Core -o src/LogiBuddy.Core -f net8.0
+dotnet new wpf -n LogiBuddy.App -o src/LogiBuddy.App -f net8.0-windows
+dotnet new xunit -n LogiBuddy.Core.Tests -o tests/LogiBuddy.Core.Tests -f net8.0
+dotnet sln add src/LogiBuddy.Core/LogiBuddy.Core.csproj
+dotnet sln add src/LogiBuddy.App/LogiBuddy.App.csproj
+dotnet sln add tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj
+dotnet add src/LogiBuddy.App/LogiBuddy.App.csproj reference src/LogiBuddy.Core/LogiBuddy.Core.csproj
+dotnet add tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj reference src/LogiBuddy.Core/LogiBuddy.Core.csproj
+dotnet add src/LogiBuddy.Core/LogiBuddy.Core.csproj package NAudio
+rm src/LogiBuddy.Core/Class1.cs
 ```
 
 - [ ] **Step 2: Write `FreelookHotkey.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public class FreelookHotkey
 {
@@ -138,7 +138,7 @@ public class FreelookHotkey
 - [ ] **Step 3: Write `RadioProfile.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public class RadioProfile
 {
@@ -171,10 +171,10 @@ public class RadioProfile
 
 ```csharp
 using System.IO;
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Config;
+namespace LogiBuddy.Core.Tests.Config;
 
 public class ConfigStoreTests
 {
@@ -269,13 +269,13 @@ public class ConfigStoreTests
 
 - [ ] **Step 5: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: build FAILS — `IConfigStore`/`ConfigStore` don't exist yet.
 
 - [ ] **Step 6: Write `IConfigStore.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public interface IConfigStore
 {
@@ -291,7 +291,7 @@ public interface IConfigStore
 ```csharp
 using System.Text.Json;
 
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public class ConfigStore : IConfigStore
 {
@@ -302,7 +302,7 @@ public class ConfigStore : IConfigStore
     {
         _directory = directoryOverride ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "SpotifyGameRadio", "Profiles");
+            "LogiBuddy", "Profiles");
         Directory.CreateDirectory(_directory);
     }
 
@@ -342,7 +342,7 @@ public class ConfigStore : IConfigStore
 
 - [ ] **Step 8: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: PASS (3 tests).
 
 - [ ] **Step 9: Commit**
@@ -357,8 +357,8 @@ git commit -m "feat: scaffold solution and add RadioProfile/ConfigStore"
 ### Task 2: BiquadFilter (high-pass / low-pass)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Dsp/BiquadFilter.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/BiquadFilterTests.cs`
+- Create: `src/LogiBuddy.Core/Dsp/BiquadFilter.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/BiquadFilterTests.cs`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -367,10 +367,10 @@ git commit -m "feat: scaffold solution and add RadioProfile/ConfigStore"
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class BiquadFilterTests
 {
@@ -431,13 +431,13 @@ public class BiquadFilterTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter BiquadFilterTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter BiquadFilterTests`
 Expected: FAIL — `BiquadFilter` doesn't exist yet.
 
 - [ ] **Step 3: Write `BiquadFilter.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 public enum BiquadFilterType { HighPass, LowPass }
 
@@ -507,7 +507,7 @@ public class BiquadFilter
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter BiquadFilterTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter BiquadFilterTests`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -522,12 +522,12 @@ git commit -m "feat: add BiquadFilter high-pass/low-pass DSP"
 ### Task 3: SoftClipDistortion, Compressor, NoiseGenerator
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Dsp/SoftClipDistortion.cs`
-- Create: `src/SpotifyGameRadio.Core/Dsp/Compressor.cs`
-- Create: `src/SpotifyGameRadio.Core/Dsp/NoiseGenerator.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/SoftClipDistortionTests.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/CompressorTests.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/NoiseGeneratorTests.cs`
+- Create: `src/LogiBuddy.Core/Dsp/SoftClipDistortion.cs`
+- Create: `src/LogiBuddy.Core/Dsp/Compressor.cs`
+- Create: `src/LogiBuddy.Core/Dsp/NoiseGenerator.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/SoftClipDistortionTests.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/CompressorTests.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/NoiseGeneratorTests.cs`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -536,10 +536,10 @@ git commit -m "feat: add BiquadFilter high-pass/low-pass DSP"
 - [ ] **Step 1: Write the failing tests**
 
 ```csharp
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class SoftClipDistortionTests
 {
@@ -578,10 +578,10 @@ public class SoftClipDistortionTests
 ```
 
 ```csharp
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class CompressorTests
 {
@@ -614,10 +614,10 @@ public class CompressorTests
 ```
 
 ```csharp
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class NoiseGeneratorTests
 {
@@ -656,13 +656,13 @@ public class NoiseGeneratorTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "SoftClipDistortionTests|CompressorTests|NoiseGeneratorTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "SoftClipDistortionTests|CompressorTests|NoiseGeneratorTests"`
 Expected: FAIL — none of the three classes exist yet.
 
 - [ ] **Step 3: Write `SoftClipDistortion.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 /// Drive in [0,1]: 0 = bypass, higher = more aggressive tanh-style soft clipping.
 public class SoftClipDistortion
@@ -686,7 +686,7 @@ public class SoftClipDistortion
 - [ ] **Step 4: Write `Compressor.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 /// Simple feed-forward peak compressor with exponential attack/release envelopes.
 public class Compressor
@@ -728,7 +728,7 @@ public class Compressor
 - [ ] **Step 5: Write `NoiseGenerator.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 /// Uniform white noise generator scaled by Level, seeded for deterministic tests.
 public class NoiseGenerator
@@ -753,7 +753,7 @@ public class NoiseGenerator
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "SoftClipDistortionTests|CompressorTests|NoiseGeneratorTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "SoftClipDistortionTests|CompressorTests|NoiseGeneratorTests"`
 Expected: PASS (8 tests).
 
 - [ ] **Step 7: Commit**
@@ -768,8 +768,8 @@ git commit -m "feat: add distortion, compressor, and noise DSP units"
 ### Task 4: RadioEffectChain
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Dsp/RadioEffectChain.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/RadioEffectChainTests.cs`
+- Create: `src/LogiBuddy.Core/Dsp/RadioEffectChain.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/RadioEffectChainTests.cs`
 
 **Interfaces:**
 - Consumes: `BiquadFilter`, `BiquadFilterType` (Task 2); `SoftClipDistortion`, `Compressor`, `NoiseGenerator` (Task 3); `RadioProfile` (Task 1).
@@ -778,11 +778,11 @@ git commit -m "feat: add distortion, compressor, and noise DSP units"
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class RadioEffectChainTests
 {
@@ -866,15 +866,15 @@ public class RadioEffectChainTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RadioEffectChainTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RadioEffectChainTests`
 Expected: FAIL — `RadioEffectChain` doesn't exist yet.
 
 - [ ] **Step 3: Write `RadioEffectChain.cs`**
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 public class RadioEffectChain
 {
@@ -966,7 +966,7 @@ public class RadioEffectChain
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RadioEffectChainTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RadioEffectChainTests`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -981,9 +981,9 @@ git commit -m "feat: add RadioEffectChain combining filters, distortion, compres
 ### Task 5: FreelookTracker
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Tracking/IMouseInputSource.cs`
-- Create: `src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs`
+- Create: `src/LogiBuddy.Core/Tracking/IMouseInputSource.cs`
+- Create: `src/LogiBuddy.Core/Tracking/FreelookTracker.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile` (Task 1, for `MouseSensitivity`, `MaxYawDegrees`, `MaxPitchDegrees`, `SpringBackRatePerSecond`).
@@ -992,11 +992,11 @@ git commit -m "feat: add RadioEffectChain combining filters, distortion, compres
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Tracking;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Tracking;
+namespace LogiBuddy.Core.Tests.Tracking;
 
 public class FakeMouseInputSource : IMouseInputSource
 {
@@ -1081,13 +1081,13 @@ public class FreelookTrackerTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter FreelookTrackerTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter FreelookTrackerTests`
 Expected: FAIL — `IMouseInputSource`/`FreelookTracker` don't exist yet.
 
 - [ ] **Step 3: Write `IMouseInputSource.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 public interface IMouseInputSource
 {
@@ -1101,9 +1101,9 @@ public interface IMouseInputSource
 - [ ] **Step 4: Write `FreelookTracker.cs`**
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 public class FreelookTracker
 {
@@ -1157,7 +1157,7 @@ public class FreelookTracker
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter FreelookTrackerTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter FreelookTrackerTests`
 Expected: PASS (5 tests).
 
 - [ ] **Step 6: Commit**
@@ -1172,7 +1172,7 @@ git commit -m "feat: add FreelookTracker with clamp and spring-back angle math"
 ### Task 6: Win32MouseHook (real global input source)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Tracking/Win32MouseHook.cs`
+- Create: `src/LogiBuddy.Core/Tracking/Win32MouseHook.cs`
 
 **Interfaces:**
 - Consumes: `IMouseInputSource` (Task 5), `FreelookHotkey` (Task 1).
@@ -1182,9 +1182,9 @@ git commit -m "feat: add FreelookTracker with clamp and spring-back angle math"
 
 ```csharp
 using System.Runtime.InteropServices;
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 /// Global low-level mouse hook + polled hotkey state. Does not read from or
 /// inject into any other process — same risk class as AutoHotkey.
@@ -1304,7 +1304,7 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
 
 - [ ] **Step 2: Add project reference for WPF Dispatcher type**
 
-`Win32MouseHook.cs` uses `System.Windows.Threading.Dispatcher`, which requires a Windows Desktop target framework. Edit `src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj` and change the `<TargetFramework>` element:
+`Win32MouseHook.cs` uses `System.Windows.Threading.Dispatcher`, which requires a Windows Desktop target framework. Edit `src/LogiBuddy.Core/LogiBuddy.Core.csproj` and change the `<TargetFramework>` element:
 
 ```xml
 <TargetFramework>net8.0-windows</TargetFramework>
@@ -1313,7 +1313,7 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
 
 - [ ] **Step 3: Verify the solution still builds**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds with no errors.
 
 - [ ] **Step 4: Manual verification (no automated test — real OS hook)**
@@ -1337,9 +1337,9 @@ git commit -m "feat: add Win32MouseHook global freelook input source"
 ### Task 7: ISpatializer and StereoPanSpatializer (fallback)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Spatial/ISpatializer.cs`
-- Create: `src/SpotifyGameRadio.Core/Spatial/StereoPanSpatializer.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Spatial/StereoPanSpatializerTests.cs`
+- Create: `src/LogiBuddy.Core/Spatial/ISpatializer.cs`
+- Create: `src/LogiBuddy.Core/Spatial/StereoPanSpatializer.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Spatial/StereoPanSpatializerTests.cs`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks (pure math).
@@ -1348,10 +1348,10 @@ git commit -m "feat: add Win32MouseHook global freelook input source"
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
-using SpotifyGameRadio.Core.Spatial;
+using LogiBuddy.Core.Spatial;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Spatial;
+namespace LogiBuddy.Core.Tests.Spatial;
 
 public class StereoPanSpatializerTests
 {
@@ -1418,13 +1418,13 @@ public class StereoPanSpatializerTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter StereoPanSpatializerTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter StereoPanSpatializerTests`
 Expected: FAIL — `ISpatializer`/`StereoPanSpatializer` don't exist yet.
 
 - [ ] **Step 3: Write `ISpatializer.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Spatial;
+namespace LogiBuddy.Core.Spatial;
 
 public interface ISpatializer
 {
@@ -1442,7 +1442,7 @@ public interface ISpatializer
 - [ ] **Step 4: Write `StereoPanSpatializer.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Spatial;
+namespace LogiBuddy.Core.Spatial;
 
 /// Simple equal-power pan law based on the source's azimuth relative to the
 /// listener, used as a guaranteed-available fallback when true HRTF
@@ -1496,7 +1496,7 @@ public class StereoPanSpatializer : ISpatializer
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter StereoPanSpatializerTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter StereoPanSpatializerTests`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Commit**
@@ -1511,10 +1511,10 @@ git commit -m "feat: add ISpatializer and StereoPanSpatializer fallback"
 ### Task 8: Steam Audio native integration (SteamAudioSpatializer)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Spatial/SteamAudioNative.cs`
-- Create: `src/SpotifyGameRadio.Core/Spatial/SteamAudioSpatializer.cs`
-- Create: `src/SpotifyGameRadio.App/runtimes/win-x64/native/` (native binaries directory)
-- Modify: `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj` (copy native DLLs to output)
+- Create: `src/LogiBuddy.Core/Spatial/SteamAudioNative.cs`
+- Create: `src/LogiBuddy.Core/Spatial/SteamAudioSpatializer.cs`
+- Create: `src/LogiBuddy.App/runtimes/win-x64/native/` (native binaries directory)
+- Modify: `src/LogiBuddy.App/LogiBuddy.App.csproj` (copy native DLLs to output)
 
 **Interfaces:**
 - Consumes: `ISpatializer` (Task 7, implements the same interface).
@@ -1525,12 +1525,12 @@ git commit -m "feat: add ISpatializer and StereoPanSpatializer fallback"
 Steam Audio ships prebuilt binaries; there is no NuGet package, so it must be downloaded manually:
 
 1. Download the Steam Audio SDK release (`steamaudio_<version>.zip`) from Valve's Steam Audio releases.
-2. Copy `lib/windows-x64/phonon.dll` into `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`.
+2. Copy `lib/windows-x64/phonon.dll` into `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll`.
 3. Do not commit large binaries directly if the repo will be shared publicly without Git LFS — for this project, commit it directly since the repo is private and the file is a few MB.
 
 - [ ] **Step 2: Add `phonon.dll` to the App project's output**
 
-Edit `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`, add inside the existing `<Project>` element:
+Edit `src/LogiBuddy.App/LogiBuddy.App.csproj`, add inside the existing `<Project>` element:
 
 ```xml
 <ItemGroup>
@@ -1545,7 +1545,7 @@ Edit `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`, add inside the exis
 ```csharp
 using System.Runtime.InteropServices;
 
-namespace SpotifyGameRadio.Core.Spatial;
+namespace LogiBuddy.Core.Spatial;
 
 /// P/Invoke surface for the subset of Steam Audio's C API (phonon.h) this
 /// app needs: context creation, an HRTF instance, and a binaural effect
@@ -1637,9 +1637,9 @@ internal static class SteamAudioNative
 - [ ] **Step 4: Write `SteamAudioSpatializer.cs`**
 
 ```csharp
-using static SpotifyGameRadio.Core.Spatial.SteamAudioNative;
+using static LogiBuddy.Core.Spatial.SteamAudioNative;
 
-namespace SpotifyGameRadio.Core.Spatial;
+namespace LogiBuddy.Core.Spatial;
 
 public class SteamAudioSpatializer : ISpatializer, IDisposable
 {
@@ -1763,18 +1763,18 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
 
 - [ ] **Step 5: Enable unsafe code and verify build**
 
-Edit `src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj`, add inside `<PropertyGroup>`:
+Edit `src/LogiBuddy.Core/LogiBuddy.Core.csproj`, add inside `<PropertyGroup>`:
 
 ```xml
 <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 ```
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds.
 
 - [ ] **Step 6: Manual verification (no automated test — requires native library + real listening)**
 
-1. Confirm `phonon.dll` is present at `src/SpotifyGameRadio.App/bin/Debug/net8.0-windows/runtimes/win-x64/native/phonon.dll` after building the App project.
+1. Confirm `phonon.dll` is present at `src/LogiBuddy.App/bin/Debug/net8.0-windows/runtimes/win-x64/native/phonon.dll` after building the App project.
 2. Write a temporary console snippet that calls `SteamAudioSpatializer.TryCreate(48000, 1024, out var spatializer)`, feeds it a 1kHz test tone with the source at `(1, 0, 0)` (hard right) and listener yaw `0`, writes the resulting stereo buffer to a `.wav` file (use NAudio's `WaveFileWriter`), and listens to confirm the tone is audibly panned/filtered toward the right ear with HRTF coloration (not just a flat pan).
 3. Repeat with `SetListenerOrientation(90, 0)` (listener turned right) and confirm the source now sounds like it's behind/left, matching a world-fixed source.
 4. If `TryCreate` returns `false`, check that `phonon.dll` is a matching architecture (x64) and that struct layouts in `SteamAudioNative.cs` match the downloaded SDK version's `phonon.h`; fix and retest before proceeding.
@@ -1792,7 +1792,7 @@ git commit -m "feat: add Steam Audio HRTF spatializer with native library integr
 ### Task 9: AudioSessionEnumerator
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/AudioSessionEnumerator.cs`
+- Create: `src/LogiBuddy.Core/Audio/AudioSessionEnumerator.cs`
 
 **Interfaces:**
 - Consumes: NAudio's `MMDeviceEnumerator`/`AudioSessionManager` APIs.
@@ -1804,7 +1804,7 @@ git commit -m "feat: add Steam Audio HRTF spatializer with native library integr
 using System.Diagnostics;
 using NAudio.CoreAudioApi;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public record AudioSourceInfo(string ProcessName, int ProcessId, string DisplayName);
 
@@ -1853,7 +1853,7 @@ public static class AudioSessionEnumerator
 
 - [ ] **Step 2: Verify build**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds.
 
 - [ ] **Step 3: Manual verification (no automated test — requires real running processes)**
@@ -1875,11 +1875,11 @@ git commit -m "feat: add AudioSessionEnumerator for source process discovery"
 ### Task 10: Audio capture (process-loopback with device-loopback fallback)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/AudioCaptureStatus.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/IAudioCaptureService.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/WasapiProcessLoopbackInterop.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/WasapiProcessLoopbackCapture.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/WasapiDeviceLoopbackCapture.cs`
+- Create: `src/LogiBuddy.Core/Audio/AudioCaptureStatus.cs`
+- Create: `src/LogiBuddy.Core/Audio/IAudioCaptureService.cs`
+- Create: `src/LogiBuddy.Core/Audio/WasapiProcessLoopbackInterop.cs`
+- Create: `src/LogiBuddy.Core/Audio/WasapiProcessLoopbackCapture.cs`
+- Create: `src/LogiBuddy.Core/Audio/WasapiDeviceLoopbackCapture.cs`
 
 **Interfaces:**
 - Consumes: `AudioSourceInfo` (Task 9).
@@ -1888,7 +1888,7 @@ git commit -m "feat: add AudioSessionEnumerator for source process discovery"
 - [ ] **Step 1: Write `AudioCaptureStatus.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public enum AudioCaptureStatus { NoSource, Capturing, Error }
 ```
@@ -1898,7 +1898,7 @@ public enum AudioCaptureStatus { NoSource, Capturing, Error }
 ```csharp
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public interface IAudioCaptureService : IDisposable
 {
@@ -1918,7 +1918,7 @@ public interface IAudioCaptureService : IDisposable
 ```csharp
 using System.Runtime.InteropServices;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 /// Raw COM interop for Windows 10 20H1+ per-process WASAPI loopback capture
 /// (ActivateAudioInterfaceAsync with AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK).
@@ -2025,7 +2025,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public class WasapiProcessLoopbackCapture : IAudioCaptureService
 {
@@ -2221,7 +2221,7 @@ public class WasapiProcessLoopbackCapture : IAudioCaptureService
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 /// Fallback for Windows versions without per-process loopback support:
 /// captures everything playing on the chosen output device, not just one
@@ -2272,7 +2272,7 @@ public class WasapiDeviceLoopbackCapture : IAudioCaptureService
 
 - [ ] **Step 7: Verify build**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds (the `NotSupportedException` throw in `WasapiProcessLoopbackCapture.TryStart` is expected to remain until Step 5's manual completion is done on a Windows dev machine).
 
 - [ ] **Step 8: Commit**
@@ -2287,8 +2287,8 @@ git commit -m "feat: add WASAPI process-loopback and device-loopback capture ser
 ### Task 11: WasapiAudioOutput
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/IAudioOutputService.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/WasapiAudioOutput.cs`
+- Create: `src/LogiBuddy.Core/Audio/IAudioOutputService.cs`
+- Create: `src/LogiBuddy.Core/Audio/WasapiAudioOutput.cs`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks (standalone WASAPI wrapper).
@@ -2297,7 +2297,7 @@ git commit -m "feat: add WASAPI process-loopback and device-loopback capture ser
 - [ ] **Step 1: Write `IAudioOutputService.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public interface IAudioOutputService : IDisposable
 {
@@ -2316,7 +2316,7 @@ public interface IAudioOutputService : IDisposable
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public class WasapiAudioOutput : IAudioOutputService
 {
@@ -2376,7 +2376,7 @@ public class WasapiAudioOutput : IAudioOutputService
 
 - [ ] **Step 3: Verify build**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds.
 
 - [ ] **Step 4: Manual verification (no automated test — requires real audio hardware)**
@@ -2398,8 +2398,8 @@ git commit -m "feat: add WasapiAudioOutput render service"
 ### Task 12: RadioPipeline
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`
+- Create: `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`
 
 **Interfaces:**
 - Consumes: `IAudioCaptureService` (Task 10), `IAudioOutputService` (Task 11), `ISpatializer` (Task 7/8), `RadioEffectChain` (Task 4), `FreelookTracker` (Task 5), `RadioProfile`/`IConfigStore` (Task 1).
@@ -2408,16 +2408,16 @@ git commit -m "feat: add WasapiAudioOutput render service"
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Dsp;
-using SpotifyGameRadio.Core.Pipeline;
-using SpotifyGameRadio.Core.Spatial;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Audio;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Dsp;
+using LogiBuddy.Core.Pipeline;
+using LogiBuddy.Core.Spatial;
+using LogiBuddy.Core.Tracking;
 using NAudio.Wave;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Pipeline;
+namespace LogiBuddy.Core.Tests.Pipeline;
 
 public class FakeCaptureService : IAudioCaptureService
 {
@@ -2470,7 +2470,7 @@ public class RadioPipelineTests
     private static RadioPipeline BuildPipeline(FakeCaptureService capture, FakeOutputService output, out FreelookTracker tracker)
     {
         var profile = new RadioProfile { WetDryMix = 0f }; // dry passthrough for deterministic assertions
-        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var fakeInput = new LogiBuddy.Core.Tests.Tracking.FakeMouseInputSource();
         tracker = new FreelookTracker(fakeInput, profile);
         var effectChain = new RadioEffectChain(48000f);
         effectChain.ApplyProfile(profile);
@@ -2556,19 +2556,19 @@ public class RadioPipelineTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RadioPipelineTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RadioPipelineTests`
 Expected: FAIL — `RadioPipeline` doesn't exist yet.
 
 - [ ] **Step 3: Write `RadioPipeline.cs`**
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Dsp;
-using SpotifyGameRadio.Core.Spatial;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Audio;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Dsp;
+using LogiBuddy.Core.Spatial;
+using LogiBuddy.Core.Tracking;
 
-namespace SpotifyGameRadio.Core.Pipeline;
+namespace LogiBuddy.Core.Pipeline;
 
 public class RadioPipeline
 {
@@ -2692,12 +2692,12 @@ public class RadioPipeline
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RadioPipelineTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RadioPipelineTests`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Run the full test suite to confirm nothing else broke**
 
-Run: `dotnet test SpotifyGameRadio.sln`
+Run: `dotnet test LogiBuddy.sln`
 Expected: PASS (all tests across all previous tasks).
 
 - [ ] **Step 6: Commit**
@@ -2712,10 +2712,10 @@ git commit -m "feat: add RadioPipeline orchestrating capture, effects, spatializ
 ### Task 13: WPF MainViewModel and MainWindow shell
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/ViewModels/RelayCommand.cs`
-- Create: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
-- Verify only (no edit expected): `src/SpotifyGameRadio.App/MainWindow.xaml.cs`, `src/SpotifyGameRadio.App/App.xaml.cs` — composition happens via `MainWindow.xaml`'s inline `<Window.DataContext>` and the WPF template's default `StartupUri`; neither code-behind file needs changes for this task.
+- Create: `src/LogiBuddy.App/ViewModels/RelayCommand.cs`
+- Create: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
+- Verify only (no edit expected): `src/LogiBuddy.App/MainWindow.xaml.cs`, `src/LogiBuddy.App/App.xaml.cs` — composition happens via `MainWindow.xaml`'s inline `<Window.DataContext>` and the WPF template's default `StartupUri`; neither code-behind file needs changes for this task.
 
 **Interfaces:**
 - Consumes: `AudioSessionEnumerator` (Task 9), `RadioPipeline` (Task 12), `IConfigStore`/`RadioProfile` (Task 1), `Win32MouseHook` (Task 6), `WasapiProcessLoopbackCapture`/`WasapiDeviceLoopbackCapture` (Task 10), `WasapiAudioOutput` (Task 11), `StereoPanSpatializer`/`SteamAudioSpatializer` (Task 7/8).
@@ -2726,7 +2726,7 @@ git commit -m "feat: add RadioPipeline orchestrating capture, effects, spatializ
 ```csharp
 using System.Windows.Input;
 
-namespace SpotifyGameRadio.App.ViewModels;
+namespace LogiBuddy.App.ViewModels;
 
 public class RelayCommand : ICommand
 {
@@ -2755,14 +2755,14 @@ public class RelayCommand : ICommand
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using SpotifyGameRadio.Core.Audio;
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Dsp;
-using SpotifyGameRadio.Core.Pipeline;
-using SpotifyGameRadio.Core.Spatial;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Audio;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Dsp;
+using LogiBuddy.Core.Pipeline;
+using LogiBuddy.Core.Spatial;
+using LogiBuddy.Core.Tracking;
 
-namespace SpotifyGameRadio.App.ViewModels;
+namespace LogiBuddy.App.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged
 {
@@ -2869,11 +2869,11 @@ public class MainViewModel : INotifyPropertyChanged
 - [ ] **Step 3: Write `MainWindow.xaml`**
 
 ```xml
-<Window x:Class="SpotifyGameRadio.App.MainWindow"
+<Window x:Class="LogiBuddy.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
-        Title="Spotify Game Radio" Height="760" Width="640">
+        xmlns:local="clr-namespace:LogiBuddy.App.ViewModels"
+        Title="LogiBuddy" Height="760" Width="640">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -2954,10 +2954,10 @@ The default WPF template's `MainWindow.xaml.cs` (constructor calling `Initialize
 
 - [ ] **Step 5: Verify build and run**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds.
 
-Run: `dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: window opens, source dropdown populates with running audio sessions, sliders are interactive.
 
 - [ ] **Step 6: Manual verification**
@@ -2979,9 +2979,9 @@ git commit -m "feat: add WPF MainViewModel and main window shell"
 ### Task 14: SourcePositionCanvas (2D top-down position picker)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/Controls/SourcePositionCanvas.xaml`
-- Create: `src/SpotifyGameRadio.App/Controls/SourcePositionCanvas.xaml.cs`
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml` (add the control to the layout)
+- Create: `src/LogiBuddy.App/Controls/SourcePositionCanvas.xaml`
+- Create: `src/LogiBuddy.App/Controls/SourcePositionCanvas.xaml.cs`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml` (add the control to the layout)
 
 **Interfaces:**
 - Consumes: `MainViewModel.Profile.SourceX` / `.SourceZ` (Task 13).
@@ -2990,7 +2990,7 @@ git commit -m "feat: add WPF MainViewModel and main window shell"
 - [ ] **Step 1: Write `SourcePositionCanvas.xaml`**
 
 ```xml
-<UserControl x:Class="SpotifyGameRadio.App.Controls.SourcePositionCanvas"
+<UserControl x:Class="LogiBuddy.App.Controls.SourcePositionCanvas"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Width="200" Height="200">
@@ -3012,7 +3012,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace SpotifyGameRadio.App.Controls;
+namespace LogiBuddy.App.Controls;
 
 public partial class SourcePositionCanvas : UserControl
 {
@@ -3087,10 +3087,10 @@ public partial class SourcePositionCanvas : UserControl
 
 - [ ] **Step 3: Add the control to `MainWindow.xaml`**
 
-Edit `src/SpotifyGameRadio.App/MainWindow.xaml`: add the namespace import to the `<Window>` tag and place the control in row 5.
+Edit `src/LogiBuddy.App/MainWindow.xaml`: add the namespace import to the `<Window>` tag and place the control in row 5.
 
 ```xml
-xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
+xmlns:controls="clr-namespace:LogiBuddy.App.Controls"
 ```
 
 ```xml
@@ -3106,10 +3106,10 @@ xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
 
 - [ ] **Step 4: Verify build and run**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: build succeeds.
 
-Run: `dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: window shows the placement canvas with a white center dot (listener) and an orange marker (source).
 
 - [ ] **Step 5: Manual verification**
@@ -3130,7 +3130,7 @@ git commit -m "feat: add 2D top-down source position picker control"
 ### Task 15: End-to-end wiring, setup docs, and full verification
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs` (wire `SteamAudioSpatializer` fallback notification, `BufferUnderrunCount` polling)
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs` (wire `SteamAudioSpatializer` fallback notification, `BufferUnderrunCount` polling)
 - Create: `docs/SETUP.md`
 
 **Interfaces:**
@@ -3139,7 +3139,7 @@ git commit -m "feat: add 2D top-down source position picker control"
 
 - [ ] **Step 1: Wire fallback and underrun polling into `MainViewModel`**
 
-Edit `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`, in `Start()`, after `_pipeline.Start();`:
+Edit `src/LogiBuddy.App/ViewModels/MainViewModel.cs`, in `Start()`, after `_pipeline.Start();`:
 
 ```csharp
 if (primary == fallback)
@@ -3163,7 +3163,7 @@ underrunTimer.Start();
   Older Windows falls back to whole-device capture automatically.
 - .NET 8 SDK.
 - `phonon.dll` (Steam Audio native library) placed at
-  `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll` — see
+  `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll` — see
   Task 8 of the implementation plan for download instructions. Without
   it, the app still runs but falls back to simple stereo panning
   instead of true HRTF.
@@ -3178,7 +3178,7 @@ underrunTimer.Start();
 
 ## Running
 
-    dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj
+    dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj
 
 ## First-time use
 
@@ -3198,7 +3198,7 @@ underrunTimer.Start();
 
 - [ ] **Step 3: Run the full test suite**
 
-Run: `dotnet test SpotifyGameRadio.sln`
+Run: `dotnet test LogiBuddy.sln`
 Expected: PASS (all unit tests from Tasks 1-12).
 
 - [ ] **Step 4: Full manual end-to-end verification**

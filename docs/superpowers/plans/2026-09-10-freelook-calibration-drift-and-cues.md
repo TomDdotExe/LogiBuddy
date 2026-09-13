@@ -27,9 +27,9 @@
 ### Task 1: `RadioProfile.MeasuredMaxOffAxisDegrees`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Produces: `RadioProfile.MeasuredMaxOffAxisDegrees` (`float`, default `0f`), `SetField`-backed.
@@ -57,7 +57,7 @@ to its assertions, and
 
 - [ ] **Step 2: Run — expect compile failure**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
+`dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
 
 - [ ] **Step 3: Add the field**
 
@@ -79,12 +79,12 @@ public float MeasuredMaxOffAxisDegrees { get => _measuredMaxOffAxisDegrees; set 
 
 - [ ] **Step 4: Run the Core suite — expect pass**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --nologo`
+`dotnet test tests/LogiBuddy.Core.Tests --nologo`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/
 git commit -m "$(cat <<'EOF'
 feat: add RadioProfile.MeasuredMaxOffAxisDegrees (calibrated cone limit)
 
@@ -99,8 +99,8 @@ EOF
 ### Task 2: `FreelookTracker` — snap on release, off-axis clamp, always-on idle ease
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs`
+- Modify: `src/LogiBuddy.Core/Tracking/FreelookTracker.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.MeasuredMaxOffAxisDegrees` (Task 1), existing `MouseSensitivity` / `MaxYawDegrees` / `MaxPitchDegrees` / `SpringBackRatePerSecond` / `FreelookAlwaysOn`, `IMouseInputSource.IsHotkeyHeld`.
@@ -223,7 +223,7 @@ stay unchanged.
 
 - [ ] **Step 2: Run — expect the new/changed tests to fail**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~FreelookTrackerTests`
+`dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~FreelookTrackerTests`
 
 - [ ] **Step 3: Implement**
 
@@ -306,16 +306,16 @@ reset *above* that guard so an always-on move always counts):
 
 - [ ] **Step 4: Run FreelookTracker tests — expect pass**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~FreelookTrackerTests`
+`dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~FreelookTrackerTests`
 
 - [ ] **Step 5: Run full Core suite — expect pass**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --nologo`
+`dotnet test tests/LogiBuddy.Core.Tests --nologo`
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs
+git add src/LogiBuddy.Core/Tracking/FreelookTracker.cs tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs
 git commit -m "$(cat <<'EOF'
 feat: FreelookTracker snap-on-release, off-axis clamp, always-on idle ease
 
@@ -336,8 +336,8 @@ EOF
 ### Task 3: `CalibrationSession` — centre / right / corner marks
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Tracking/CalibrationSession.cs`
-- Rewrite: `tests/SpotifyGameRadio.Core.Tests/Tracking/CalibrationSessionTests.cs`
+- Modify: `src/LogiBuddy.Core/Tracking/CalibrationSession.cs`
+- Rewrite: `tests/LogiBuddy.Core.Tests/Tracking/CalibrationSessionTests.cs`
 
 **Interfaces:**
 - Produces:
@@ -349,10 +349,10 @@ EOF
 
 ```csharp
 using System;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Tracking;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Tracking;
+namespace LogiBuddy.Core.Tests.Tracking;
 
 public class CalibrationSessionTests
 {
@@ -529,7 +529,7 @@ public class CalibrationSessionTests
 
 - [ ] **Step 2: Run — expect failures**
 
-`dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
+`dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
 
 - [ ] **Step 3: Modify `CalibrationSession.cs`**
 
@@ -599,7 +599,7 @@ public class CalibrationSessionTests
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Tracking/CalibrationSession.cs tests/SpotifyGameRadio.Core.Tests/Tracking/CalibrationSessionTests.cs
+git add src/LogiBuddy.Core/Tracking/CalibrationSession.cs tests/LogiBuddy.Core.Tests/Tracking/CalibrationSessionTests.cs
 git commit -m "$(cat <<'EOF'
 feat: CalibrationSession — centre/right/corner marks, X+Y accumulators
 
@@ -618,8 +618,8 @@ EOF
 ### Task 4: `CalibrationAnnouncer` (replaces `CalibrationCuePlayer`)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/Audio/CalibrationAnnouncer.cs`
-- Delete: `src/SpotifyGameRadio.App/Audio/CalibrationCuePlayer.cs`
+- Create: `src/LogiBuddy.App/Audio/CalibrationAnnouncer.cs`
+- Delete: `src/LogiBuddy.App/Audio/CalibrationCuePlayer.cs`
 
 **Interfaces:**
 - Consumes: `System.Speech.Synthesis.SpeechSynthesizer`; NAudio `WaveFileReader`, `WasapiOut`, `WaveOutEvent`; `NAudio.CoreAudioApi.MMDeviceEnumerator`.
@@ -640,7 +640,7 @@ using System.Speech.Synthesis;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.App.Audio;
+namespace LogiBuddy.App.Audio;
 
 /// Speaks short calibration status phrases through the configured radio
 /// output device. Fire-and-forget; any failure (no voice, no device) is
@@ -733,7 +733,7 @@ public sealed class CalibrationAnnouncer : IDisposable
 - [ ] **Step 2: Delete `CalibrationCuePlayer.cs`**
 
 ```bash
-git rm src/SpotifyGameRadio.App/Audio/CalibrationCuePlayer.cs
+git rm src/LogiBuddy.App/Audio/CalibrationCuePlayer.cs
 ```
 
 (Task 5 removes its last references; the project will not build green
@@ -743,7 +743,7 @@ before running the App build.)
 - [ ] **Step 3: Commit (allowing the interim non-building App)**
 
 ```bash
-git add src/SpotifyGameRadio.App/Audio/CalibrationAnnouncer.cs
+git add src/LogiBuddy.App/Audio/CalibrationAnnouncer.cs
 git commit -m "$(cat <<'EOF'
 feat: add CalibrationAnnouncer (System.Speech TTS to the configured device)
 
@@ -763,8 +763,8 @@ EOF
 ### Task 5: Wire the new flow into `MainViewModel` and the window
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `CalibrationAnnouncer` (Task 4), `CalibrationStep` / `CalibrationResult` (Task 3), `RadioProfile.MeasuredMaxOffAxisDegrees` (Task 1).
@@ -862,17 +862,17 @@ Set the window `Height="960"` (was 990).
 
 - [ ] **Step 5: Build the solution — expect success**
 
-`dotnet build SpotifyGameRadio.sln -c Debug --nologo`
+`dotnet build LogiBuddy.sln -c Debug --nologo`
 Expected: 0 errors, 0 warnings. `System.Speech.dll` present under
-`src/SpotifyGameRadio.App/bin/Debug/net8.0-windows/`.
+`src/LogiBuddy.App/bin/Debug/net8.0-windows/`.
 
 - [ ] **Step 6: Run the full test suite**
 
-`dotnet test SpotifyGameRadio.sln --nologo` — expect PASS.
+`dotnet test LogiBuddy.sln --nologo` — expect PASS.
 
 - [ ] **Step 7: Launch smoke test**
 
-`dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+`dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: window opens, no Spring-back row, status line not clipped, the
 "Calibrate hotkey:" row still present.
 
@@ -901,7 +901,7 @@ Expected: window opens, no Spring-back row, status line not clipped, the
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs src/LogiBuddy.App/MainWindow.xaml
 git commit -m "$(cat <<'EOF'
 feat: wire 3-mark calibration, spoken cues, and cone limit into the VM/window
 

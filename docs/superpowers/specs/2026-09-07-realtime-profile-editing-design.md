@@ -149,7 +149,7 @@ next Start.
 
 ## Testing
 
-Automated (xUnit, `SpotifyGameRadio.Core.Tests`):
+Automated (xUnit, `LogiBuddy.Core.Tests`):
 
 - `RadioProfileTests` (new) — setting each public property raises
   `PropertyChanged` once with the correct name; setting a property to

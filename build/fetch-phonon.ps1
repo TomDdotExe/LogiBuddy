@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Ensure src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll is the
+  Ensure src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll is the
   pinned Steam Audio build, and fetch the license texts needed to
   redistribute it. Idempotent; performs no network I/O once everything is
   in place.
@@ -34,7 +34,7 @@ $LicenseSha256     = 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc
 # --------------------------------------------------------------------------
 
 $repoRoot     = Split-Path -Parent $PSScriptRoot
-$targetDll    = Join-Path $repoRoot 'src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll'
+$targetDll    = Join-Path $repoRoot 'src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll'
 $licenseOut   = Join-Path $repoRoot 'build/third-party/steam-audio-LICENSE.md'
 $thirdPartyOut = Join-Path $repoRoot 'build/third-party/steam-audio-THIRDPARTY.md'
 if (-not $CacheDir) { $CacheDir = Join-Path $repoRoot 'build/.cache' }

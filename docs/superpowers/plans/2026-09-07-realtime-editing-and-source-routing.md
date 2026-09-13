@@ -20,8 +20,8 @@
 - No locking on the audio path. Rely on atomic scalar reads/writes; a one-block coefficient blend during an edit is acceptable.
 - Source routing requires Windows 11 (`Environment.OSVersion.Version.Build >= 22000`). On lower/unknown builds `WindowsAppAudioRouter.IsSupported` is `false`; capture still works.
 - The `IAudioPolicyConfig` interop must degrade to `IsSupported = false` on activation failure or `E_NOINTERFACE` — never crash the app.
-- Every routing change is persisted by Windows and must be paired with a restore. `route-recovery.json` in `%AppData%/SpotifyGameRadio/` makes restore survive a crash.
-- Follow existing patterns: dependencies are `new`-ed directly in `MainViewModel`; automated tests live only in `SpotifyGameRadio.Core.Tests` (there is no WPF test project); WPF / COM / hardware code is verified by a manual checklist, not xUnit.
+- Every routing change is persisted by Windows and must be paired with a restore. `route-recovery.json` in `%AppData%/LogiBuddy/` makes restore survive a crash.
+- Follow existing patterns: dependencies are `new`-ed directly in `MainViewModel`; automated tests live only in `LogiBuddy.Core.Tests` (there is no WPF test project); WPF / COM / hardware code is verified by a manual checklist, not xUnit.
 - End every commit message with:
   ```
   Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
@@ -33,22 +33,22 @@
 ## File Structure
 
 **Create:**
-- `src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml` / `.xaml.cs` — click-to-rebind control for the freelook key, exposes a two-way `Hotkey` dependency property.
-- `src/SpotifyGameRadio.Core/Audio/RenderDeviceEnumerator.cs` — active render-endpoint list + virtual-cable name heuristic.
-- `src/SpotifyGameRadio.Core/Audio/AudioPolicyConfigInterop.cs` — raw COM for Windows 11 per-app routing.
-- `src/SpotifyGameRadio.Core/Audio/SourceAudioRouter.cs` — `ISourceAudioRouter`, `WindowsAppAudioRouter`, `AppAudioRoute`, `SourceRoutingException`.
-- `src/SpotifyGameRadio.Core/Config/RouteRecoveryStore.cs` — `RouteRecoveryRecord` + read/write/delete of `route-recovery.json`.
-- `tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs`
-- `tests/SpotifyGameRadio.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`
-- `tests/SpotifyGameRadio.Core.Tests/Config/RouteRecoveryStoreTests.cs`
+- `src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml` / `.xaml.cs` — click-to-rebind control for the freelook key, exposes a two-way `Hotkey` dependency property.
+- `src/LogiBuddy.Core/Audio/RenderDeviceEnumerator.cs` — active render-endpoint list + virtual-cable name heuristic.
+- `src/LogiBuddy.Core/Audio/AudioPolicyConfigInterop.cs` — raw COM for Windows 11 per-app routing.
+- `src/LogiBuddy.Core/Audio/SourceAudioRouter.cs` — `ISourceAudioRouter`, `WindowsAppAudioRouter`, `AppAudioRoute`, `SourceRoutingException`.
+- `src/LogiBuddy.Core/Config/RouteRecoveryStore.cs` — `RouteRecoveryRecord` + read/write/delete of `route-recovery.json`.
+- `tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs`
+- `tests/LogiBuddy.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`
+- `tests/LogiBuddy.Core.Tests/Config/RouteRecoveryStoreTests.cs`
 
 **Modify:**
-- `src/SpotifyGameRadio.Core/Config/RadioProfile.cs` — `INotifyPropertyChanged`; two new routing fields.
-- `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs` — doc comment only on `ApplyProfile`.
-- `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs` — observe `Profile`, live/restart routing, `RestartRequired`, routing in `Start`/`Stop`/ctor, `ResetSourceRoutingCommand`.
-- `src/SpotifyGameRadio.App/MainWindow.xaml` — freelook rows, restart hint, routing row, `BooleanToVisibilityConverter` resource.
-- `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs` — round-trip + legacy-load assertions for new fields.
-- `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs` — live `ApplyProfile` case + `RecordingSpatializer`.
+- `src/LogiBuddy.Core/Config/RadioProfile.cs` — `INotifyPropertyChanged`; two new routing fields.
+- `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs` — doc comment only on `ApplyProfile`.
+- `src/LogiBuddy.App/ViewModels/MainViewModel.cs` — observe `Profile`, live/restart routing, `RestartRequired`, routing in `Start`/`Stop`/ctor, `ResetSourceRoutingCommand`.
+- `src/LogiBuddy.App/MainWindow.xaml` — freelook rows, restart hint, routing row, `BooleanToVisibilityConverter` resource.
+- `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs` — round-trip + legacy-load assertions for new fields.
+- `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs` — live `ApplyProfile` case + `RecordingSpatializer`.
 - `docs/SETUP.md` — manual checklists for both features.
 
 ---
@@ -56,9 +56,9 @@
 ### Task 1: `RadioProfile` raises `INotifyPropertyChanged`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Create: `tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs`
-- Modify: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Create: `tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs`
+- Modify: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Consumes: nothing new.
@@ -66,13 +66,13 @@
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs`:
+Create `tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Config;
+namespace LogiBuddy.Core.Tests.Config;
 
 public class RadioProfileTests
 {
@@ -118,7 +118,7 @@ public class RadioProfileTests
 }
 ```
 
-Add to `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs` (new `[Fact]` inside the class):
+Add to `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs` (new `[Fact]` inside the class):
 
 ```csharp
     [Fact]
@@ -147,7 +147,7 @@ Add to `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs` (new `[Fac
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "RadioProfileTests|ConfigStoreTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "RadioProfileTests|ConfigStoreTests"`
 Expected: `RadioProfileTests` FAIL to build/assert — `RadioProfile` has no `PropertyChanged`. `Load_ProfileJsonMissingNewerFields_KeepsDefaults` PASSES already (proves current serialization tolerance; keep it).
 
 - [ ] **Step 3: Rewrite `RadioProfile.cs` with backing fields and change notification**
@@ -156,7 +156,7 @@ Expected: `RadioProfileTests` FAIL to build/assert — `RadioProfile` has no `Pr
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public class RadioProfile : INotifyPropertyChanged
 {
@@ -215,13 +215,13 @@ public class RadioProfile : INotifyPropertyChanged
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: all pass (35 total — the 32 existing plus the 3 new `RadioProfileTests`; `ConfigStoreTests` now has 4).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "feat: RadioProfile raises INotifyPropertyChanged"
 ```
 
@@ -230,8 +230,8 @@ git commit -m "feat: RadioProfile raises INotifyPropertyChanged"
 ### Task 2: Document `RadioPipeline.ApplyProfile` as live-safe and cover it
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs:72`
-- Modify: `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`
+- Modify: `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs:72`
+- Modify: `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile` change notification (Task 1) — not directly used here, but this task proves `ApplyProfile` is callable after `Start()`.
@@ -239,7 +239,7 @@ git commit -m "feat: RadioProfile raises INotifyPropertyChanged"
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`:
+Add to `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`:
 
 ```csharp
 public class RecordingSpatializer : ISpatializer
@@ -265,7 +265,7 @@ public class RecordingSpatializer : ISpatializer
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
         var profile = new RadioProfile { WetDryMix = 0f };
-        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var fakeInput = new LogiBuddy.Core.Tests.Tracking.FakeMouseInputSource();
         var tracker = new FreelookTracker(fakeInput, profile);
         var effectChain = new RadioEffectChain(48000f);
         var spatializer = new RecordingSpatializer();
@@ -284,12 +284,12 @@ public class RecordingSpatializer : ISpatializer
 
 - [ ] **Step 2: Run test to verify it passes (behaviour already works) — then make it meaningful by asserting the pre-condition first**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RadioPipelineTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RadioPipelineTests`
 Expected: PASS. (This is a characterization test; `ApplyProfile` already works post-Start. The value is locking that in against regressions and giving the codebase a `RecordingSpatializer`.)
 
 - [ ] **Step 3: Add the doc comment**
 
-In `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`, replace the line `    public void ApplyProfile(RadioProfile profile)` and add the comment directly above it:
+In `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs`, replace the line `    public void ApplyProfile(RadioProfile profile)` and add the comment directly above it:
 
 ```csharp
     /// Re-applies every live-tunable value (DSP parameters, freelook tuning,
@@ -303,13 +303,13 @@ In `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`, replace the line `    
 
 - [ ] **Step 4: Run the full suite**
 
-Run: `dotnet test SpotifyGameRadio.sln`
+Run: `dotnet test LogiBuddy.sln`
 Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs
+git add src/LogiBuddy.Core/Pipeline/RadioPipeline.cs tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs
 git commit -m "test: characterize live ApplyProfile on a running pipeline"
 ```
 
@@ -318,7 +318,7 @@ git commit -m "test: characterize live ApplyProfile on a running pipeline"
 ### Task 3: `MainViewModel` applies live edits and flags restarts
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.PropertyChanged` (Task 1); `RadioPipeline.ApplyProfile` (Task 2).
@@ -426,10 +426,10 @@ In `Stop()`, next to `StatusMessage = "Stopped";`:
 
 - [ ] **Step 4: Build, then manually verify**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: builds clean.
 
-Manual (run the app, tick **Test tone (440 Hz)**, Refresh, pick **SpotifyGameRadio.App**, Start):
+Manual (run the app, tick **Test tone (440 Hz)**, Refresh, pick **LogiBuddy.App**, Start):
 1. Drag **Distortion**, **Static/Noise**, **Wet/Dry Mix** — each change is audible immediately, no Stop/Start.
 2. Drag the position marker — image shifts live.
 3. Change the **Source** dropdown — audio does not change (the "restart" hint appears once Task 5 is in; for now confirm no crash and no audible change).
@@ -438,7 +438,7 @@ Manual (run the app, tick **Test tone (440 Hz)**, Refresh, pick **SpotifyGameRad
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: apply profile edits to the running pipeline in real time"
 ```
 
@@ -447,21 +447,21 @@ git commit -m "feat: apply profile edits to the running pipeline in real time"
 ### Task 4: `HotkeyCaptureControl`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml`
-- Create: `src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml.cs`
+- Create: `src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml`
+- Create: `src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml.cs`
 
 **Interfaces:**
-- Consumes: `FreelookHotkey` (`SpotifyGameRadio.Core.Config`).
+- Consumes: `FreelookHotkey` (`LogiBuddy.Core.Config`).
 - Produces: `HotkeyCaptureControl` with a two-way `Hotkey` dependency property of type `FreelookHotkey`. Click → "Press a key or mouse button…" → next key (`PreviewKeyDown`) or mouse button (`PreviewMouseDown`) is captured as a VK code; `Escape` cancels.
 
 No automated test (WPF control). Verified in Task 5's checklist.
 
 - [ ] **Step 1: Create the XAML**
 
-`src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml`:
+`src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml`:
 
 ```xml
-<UserControl x:Class="SpotifyGameRadio.App.Controls.HotkeyCaptureControl"
+<UserControl x:Class="LogiBuddy.App.Controls.HotkeyCaptureControl"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Button x:Name="CaptureButton" Width="160" Click="OnCaptureClick"
@@ -471,15 +471,15 @@ No automated test (WPF control). Verified in Task 5's checklist.
 
 - [ ] **Step 2: Create the code-behind**
 
-`src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml.cs`:
+`src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml.cs`:
 
 ```csharp
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 
-namespace SpotifyGameRadio.App.Controls;
+namespace LogiBuddy.App.Controls;
 
 public partial class HotkeyCaptureControl : UserControl
 {
@@ -568,13 +568,13 @@ public partial class HotkeyCaptureControl : UserControl
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: builds clean.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml src/SpotifyGameRadio.App/Controls/HotkeyCaptureControl.xaml.cs
+git add src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml src/LogiBuddy.App/Controls/HotkeyCaptureControl.xaml.cs
 git commit -m "feat: add HotkeyCaptureControl for rebinding the freelook key"
 ```
 
@@ -583,7 +583,7 @@ git commit -m "feat: add HotkeyCaptureControl for rebinding the freelook key"
 ### Task 5: Freelook controls and restart hint in `MainWindow`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `MainViewModel.RestartRequired` (Task 3); `HotkeyCaptureControl` (Task 4); `Profile.MouseSensitivity` / `MaxYawDegrees` / `MaxPitchDegrees` / `SpringBackRatePerSecond` / `Hotkey` (Task 1).
@@ -594,12 +594,12 @@ No automated test. Verified in Step 3.
 - [ ] **Step 1: Replace `MainWindow.xaml` with the extended layout**
 
 ```xml
-<Window x:Class="SpotifyGameRadio.App.MainWindow"
+<Window x:Class="LogiBuddy.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:SpotifyGameRadio.App.ViewModels"
-        xmlns:controls="clr-namespace:SpotifyGameRadio.App.Controls"
-        Title="Spotify Game Radio" Height="900" Width="640">
+        xmlns:local="clr-namespace:LogiBuddy.App.ViewModels"
+        xmlns:controls="clr-namespace:LogiBuddy.App.Controls"
+        Title="LogiBuddy" Height="900" Width="640">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -633,7 +633,7 @@ No automated test. Verified in Step 3.
             <Button Content="Refresh" Command="{Binding RefreshSourcesCommand}" Margin="8,0,0,0" />
             <CheckBox Content="Test tone (440 Hz)" IsChecked="{Binding TestToneEnabled}"
                       VerticalAlignment="Center" Margin="16,0,0,0"
-                      ToolTip="Plays a soft sine from this app so per-process loopback has something to capture. Pick &quot;SpotifyGameRadio.App&quot; as the source to hear it through the radio pipeline." />
+                      ToolTip="Plays a soft sine from this app so per-process loopback has something to capture. Pick &quot;LogiBuddy.App&quot; as the source to hear it through the radio pipeline." />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
@@ -721,12 +721,12 @@ No automated test. Verified in Step 3.
 
 - [ ] **Step 2: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: builds clean.
 
 - [ ] **Step 3: Manual verification**
 
-Run the app. With **Test tone** on and source = `SpotifyGameRadio.App`, click **Start**:
+Run the app. With **Test tone** on and source = `LogiBuddy.App`, click **Start**:
 1. Freelook hotkey button shows the current key ("LeftAlt"). Click it → "Press a key or mouse button…" → press a key → it shows the new key. `Escape` mid-capture cancels.
 2. Drag **Mouse sensitivity**, **Max yaw**, **Max pitch**, **Spring-back** while holding the freelook key and moving the mouse — response changes with no restart.
 3. Change **Source** or rebind the hotkey → the orange "Restart …" line appears next to the buttons. Click **Stop** then **Start** → it clears.
@@ -734,7 +734,7 @@ Run the app. With **Test tone** on and source = `SpotifyGameRadio.App`, click **
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/MainWindow.xaml
 git commit -m "feat: add freelook controls and a restart-required hint to the window"
 ```
 
@@ -743,8 +743,8 @@ git commit -m "feat: add freelook controls and a restart-required hint to the wi
 ### Task 6: `RenderDeviceEnumerator`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/RenderDeviceEnumerator.cs`
-- Create: `tests/SpotifyGameRadio.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`
+- Create: `src/LogiBuddy.Core/Audio/RenderDeviceEnumerator.cs`
+- Create: `tests/LogiBuddy.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`
 
 **Interfaces:**
 - Consumes: NAudio `MMDeviceEnumerator` (already used by `AudioSessionEnumerator`).
@@ -752,13 +752,13 @@ git commit -m "feat: add freelook controls and a restart-required hint to the wi
 
 - [ ] **Step 1: Write the failing tests**
 
-`tests/SpotifyGameRadio.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`:
+`tests/LogiBuddy.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
+using LogiBuddy.Core.Audio;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Audio;
+namespace LogiBuddy.Core.Tests.Audio;
 
 public class RenderDeviceEnumeratorTests
 {
@@ -782,7 +782,7 @@ public class RenderDeviceEnumeratorTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RenderDeviceEnumeratorTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RenderDeviceEnumeratorTests`
 Expected: FAIL — `RenderDeviceEnumerator` does not exist.
 
 - [ ] **Step 3: Write `RenderDeviceEnumerator.cs`**
@@ -790,7 +790,7 @@ Expected: FAIL — `RenderDeviceEnumerator` does not exist.
 ```csharp
 using NAudio.CoreAudioApi;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public record RenderDeviceInfo(string Id, string FriendlyName);
 
@@ -831,13 +831,13 @@ public static class RenderDeviceEnumerator
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RenderDeviceEnumeratorTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RenderDeviceEnumeratorTests`
 Expected: PASS (8 cases).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Audio/RenderDeviceEnumerator.cs tests/SpotifyGameRadio.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs
+git add src/LogiBuddy.Core/Audio/RenderDeviceEnumerator.cs tests/LogiBuddy.Core.Tests/Audio/RenderDeviceEnumeratorTests.cs
 git commit -m "feat: add RenderDeviceEnumerator with a virtual-cable name heuristic"
 ```
 
@@ -846,9 +846,9 @@ git commit -m "feat: add RenderDeviceEnumerator with a virtual-cable name heuris
 ### Task 7: Routing fields on `RadioProfile`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs` (add the two names to `RestartRequiredProfileProperties`)
-- Modify: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs` (add the two names to `RestartRequiredProfileProperties`)
+- Modify: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Consumes: the `SetField` pattern from Task 1.
@@ -879,7 +879,7 @@ In `Load_ProfileJsonMissingNewerFields_KeepsDefaults`, add:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter ConfigStoreTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter ConfigStoreTests`
 Expected: FAIL to build — `AutoRouteSource` / `RouteSourceToDeviceId` do not exist.
 
 - [ ] **Step 3: Add the fields to `RadioProfile.cs`**
@@ -919,13 +919,13 @@ Replace the comment line in `RestartRequiredProfileProperties` with the real ent
 
 - [ ] **Step 5: Run tests + build**
 
-Run: `dotnet test SpotifyGameRadio.sln` and `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet test LogiBuddy.sln` and `dotnet build LogiBuddy.sln`
 Expected: all pass, builds clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs src/LogiBuddy.App/ViewModels/MainViewModel.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "feat: add AutoRouteSource / RouteSourceToDeviceId to the profile"
 ```
 
@@ -934,8 +934,8 @@ git commit -m "feat: add AutoRouteSource / RouteSourceToDeviceId to the profile"
 ### Task 8: `WindowsAppAudioRouter` over `IAudioPolicyConfig`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/AudioPolicyConfigInterop.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/SourceAudioRouter.cs`
+- Create: `src/LogiBuddy.Core/Audio/AudioPolicyConfigInterop.cs`
+- Create: `src/LogiBuddy.Core/Audio/SourceAudioRouter.cs`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
@@ -954,7 +954,7 @@ No xUnit test — undocumented COM against live OS state (same call as `WasapiPr
 ```csharp
 using System.Runtime.InteropServices;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 internal enum EDataFlow { eRender = 0, eCapture = 1, eAll = 2 }
 
@@ -1068,7 +1068,7 @@ internal static class AudioPolicyConfigInterop
 - [ ] **Step 2: Write `SourceAudioRouter.cs`**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public sealed record AppAudioRoute(string Console, string Multimedia, string Communications)
 {
@@ -1139,15 +1139,15 @@ public sealed class WindowsAppAudioRouter : ISourceAudioRouter
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: builds clean.
 
 - [ ] **Step 4: Probe the interop on this machine (mandatory)**
 
-Create a throwaway console probe under the scratchpad directory that references `SpotifyGameRadio.Core`, and run it against the app's own process:
+Create a throwaway console probe under the scratchpad directory that references `LogiBuddy.Core`, and run it against the app's own process:
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
+using LogiBuddy.Core.Audio;
 
 var router = new WindowsAppAudioRouter();
 Console.WriteLine($"IsSupported: {router.IsSupported}");
@@ -1161,7 +1161,7 @@ Expected: `IsSupported: True`, the three route strings print (empty is fine — 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Audio/AudioPolicyConfigInterop.cs src/SpotifyGameRadio.Core/Audio/SourceAudioRouter.cs
+git add src/LogiBuddy.Core/Audio/AudioPolicyConfigInterop.cs src/LogiBuddy.Core/Audio/SourceAudioRouter.cs
 git commit -m "feat: add WindowsAppAudioRouter over the Win11 IAudioPolicyConfig API"
 ```
 
@@ -1170,8 +1170,8 @@ git commit -m "feat: add WindowsAppAudioRouter over the Win11 IAudioPolicyConfig
 ### Task 9: `RouteRecoveryStore`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Config/RouteRecoveryStore.cs`
-- Create: `tests/SpotifyGameRadio.Core.Tests/Config/RouteRecoveryStoreTests.cs`
+- Create: `src/LogiBuddy.Core/Config/RouteRecoveryStore.cs`
+- Create: `tests/LogiBuddy.Core.Tests/Config/RouteRecoveryStoreTests.cs`
 
 **Interfaces:**
 - Consumes: `AppAudioRoute` (Task 8).
@@ -1182,14 +1182,14 @@ git commit -m "feat: add WindowsAppAudioRouter over the Win11 IAudioPolicyConfig
 
 - [ ] **Step 1: Write the failing tests**
 
-`tests/SpotifyGameRadio.Core.Tests/Config/RouteRecoveryStoreTests.cs`:
+`tests/LogiBuddy.Core.Tests/Config/RouteRecoveryStoreTests.cs`:
 
 ```csharp
 using System.IO;
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Config;
+namespace LogiBuddy.Core.Tests.Config;
 
 public class RouteRecoveryStoreTests
 {
@@ -1255,7 +1255,7 @@ public class RouteRecoveryStoreTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RouteRecoveryStoreTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RouteRecoveryStoreTests`
 Expected: FAIL — types do not exist.
 
 - [ ] **Step 3: Write `RouteRecoveryStore.cs`**
@@ -1264,7 +1264,7 @@ Expected: FAIL — types do not exist.
 using System.IO;
 using System.Text.Json;
 
-namespace SpotifyGameRadio.Core.Config;
+namespace LogiBuddy.Core.Config;
 
 public sealed record RouteRecoveryEntry(int ProcessId, string Console, string Multimedia, string Communications);
 
@@ -1272,7 +1272,7 @@ public sealed record RouteRecoveryRecord(string SourceProcessName, IReadOnlyList
 
 /// Persists what a source process's per-app audio routing was before the app
 /// changed it, so a crash between Start and Stop can still be undone on the
-/// next launch. One file, %AppData%/SpotifyGameRadio/route-recovery.json.
+/// next launch. One file, %AppData%/LogiBuddy/route-recovery.json.
 public sealed class RouteRecoveryStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -1282,7 +1282,7 @@ public sealed class RouteRecoveryStore
     {
         string dir = directoryOverride ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "SpotifyGameRadio");
+            "LogiBuddy");
         Directory.CreateDirectory(dir);
         _path = Path.Combine(dir, "route-recovery.json");
     }
@@ -1308,13 +1308,13 @@ public sealed class RouteRecoveryStore
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter RouteRecoveryStoreTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter RouteRecoveryStoreTests`
 Expected: PASS (3).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RouteRecoveryStore.cs tests/SpotifyGameRadio.Core.Tests/Config/RouteRecoveryStoreTests.cs
+git add src/LogiBuddy.Core/Config/RouteRecoveryStore.cs tests/LogiBuddy.Core.Tests/Config/RouteRecoveryStoreTests.cs
 git commit -m "feat: add RouteRecoveryStore for crash-safe routing restore"
 ```
 
@@ -1323,7 +1323,7 @@ git commit -m "feat: add RouteRecoveryStore for crash-safe routing restore"
 ### Task 10: Routing in `MainViewModel` (Start / Stop / startup / reset)
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
 
 **Interfaces:**
 - Consumes: `ISourceAudioRouter` / `WindowsAppAudioRouter` / `AppAudioRoute` / `SourceRoutingException` (Task 8); `RouteRecoveryStore` / `RouteRecoveryRecord` / `RouteRecoveryEntry` (Task 9); `RenderDeviceEnumerator` (Task 6); `Profile.AutoRouteSource` / `RouteSourceToDeviceId` (Task 7).
@@ -1513,19 +1513,19 @@ At the end of the constructor (after `Profile.PropertyChanged += OnProfileProper
 
 - [ ] **Step 6: Build + manual verification**
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: builds clean.
 
 Manual (needs the VB-Audio cable + Spotify playing; `AutoRouteSource` on, device left on auto-detect — Task 12 adds the UI, so for now toggle via a saved profile or the default `true`):
 1. Start Spotify, play a track. Launch the app, set Source to `Spotify`, click **Start**.
 2. Windows **Volume Mixer** shows Spotify's output device is now the cable; only the processed radio is audible.
 3. Click **Stop** → Volume Mixer shows Spotify back on the previous device.
-4. **Start** again, then kill the app from Task Manager. Relaunch → status says "Restored…", Volume Mixer shows Spotify reverted, and `%AppData%/SpotifyGameRadio/route-recovery.json` is gone.
+4. **Start** again, then kill the app from Task Manager. Relaunch → status says "Restored…", Volume Mixer shows Spotify reverted, and `%AppData%/LogiBuddy/route-recovery.json` is gone.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: auto-route the source to a silent device on Start, restore on Stop"
 ```
 
@@ -1534,7 +1534,7 @@ git commit -m "feat: auto-route the source to a silent device on Start, restore 
 ### Task 11: Routing UI row in `MainWindow`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `Profile.AutoRouteSource` / `RouteSourceToDeviceId` (Task 7); `MainViewModel.AvailableRenderDevices` / `ResetSourceRoutingCommand` (Task 10).
@@ -1562,7 +1562,7 @@ Every following row's `Grid.Row="N"` must become `Grid.Row="N+1"` (rows 1→2 th
 
 - [ ] **Step 2: Build + verify**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: builds clean.
 
 Manual: launch the app. The routing row shows; the device dropdown lists render endpoints and disables when the checkbox is off; "Reset routing" is clickable; toggling the checkbox while running shows the restart hint.
@@ -1570,7 +1570,7 @@ Manual: launch the app. The routing row shows; the device dropdown lists render 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/MainWindow.xaml
 git commit -m "feat: add the source-routing row to the window"
 ```
 
@@ -1620,10 +1620,10 @@ endpoint while running.
 
 - [ ] **Step 3: Full regression run**
 
-Run: `dotnet test SpotifyGameRadio.sln`
+Run: `dotnet test LogiBuddy.sln`
 Expected: all pass (Core tests: 32 original + 3 `RadioProfileTests` + 1 `ConfigStoreTests` + 8 `RenderDeviceEnumeratorTests` + 3 `RouteRecoveryStoreTests` + 1 `RadioPipelineTests` = 48).
 
-Run: `dotnet build SpotifyGameRadio.sln`
+Run: `dotnet build LogiBuddy.sln`
 Expected: 0 warnings, 0 errors.
 
 - [ ] **Step 4: End-to-end manual pass**

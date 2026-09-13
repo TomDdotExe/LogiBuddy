@@ -1,12 +1,12 @@
 # build/
 
-Release packaging for Spotify Game Radio.
+Release packaging for LogiBuddy.
 
 ## Cutting a release
 
     ./build/package.ps1 -Version 1.0.0
 
-Produces `build/dist/SpotifyGameRadio-v1.0.0-win-x64.zip` (portable,
+Produces `build/dist/LogiBuddy-v1.0.0-win-x64.zip` (portable,
 framework-dependent — the end user needs the .NET 8 Desktop Runtime) and
 prints the zip's size and SHA256.
 
@@ -14,8 +14,8 @@ prints the zip's size and SHA256.
 
 | Script | Does |
 | --- | --- |
-| `fetch-phonon.ps1` | Downloads the pinned Steam Audio 4.8.1 release, verifies its SHA256, extracts `phonon.dll` to `src/SpotifyGameRadio.App/runtimes/win-x64/native/` and `THIRDPARTY.md` to `build/third-party/`, and downloads the Apache-2.0 `LICENSE.md` from the pinned git tag (the binary archive ships no license file). All three artifacts are hash-pinned. Idempotent. |
-| `package.ps1` | Runs `fetch-phonon.ps1`, `dotnet publish` (framework-dependent, no RID), asserts `phonon.dll` landed in the output and matches the pinned hash, assembles the ZIP tree (`SpotifyGameRadio/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`), compresses it. |
+| `fetch-phonon.ps1` | Downloads the pinned Steam Audio 4.8.1 release, verifies its SHA256, extracts `phonon.dll` to `src/LogiBuddy.App/runtimes/win-x64/native/` and `THIRDPARTY.md` to `build/third-party/`, and downloads the Apache-2.0 `LICENSE.md` from the pinned git tag (the binary archive ships no license file). All three artifacts are hash-pinned. Idempotent. |
+| `package.ps1` | Runs `fetch-phonon.ps1`, `dotnet publish` (framework-dependent, no RID), asserts `phonon.dll` landed in the output and matches the pinned hash, assembles the ZIP tree (`LogiBuddy/`, `README.txt`, `SETUP.md`, `THIRD-PARTY-NOTICES.txt`), compresses it. |
 
 `package.ps1 -SkipPhonon` skips the fetch when the DLL and license texts
 are already in place.
@@ -41,5 +41,5 @@ could change it.
 ## Ignored paths
 
 `build/.cache/`, `build/.staging/`, `build/dist/`, `build/third-party/`,
-and `src/SpotifyGameRadio.App/runtimes/` are all gitignored — the fetched
+and `src/LogiBuddy.App/runtimes/` are all gitignored — the fetched
 binary and build transients are never committed.

@@ -73,7 +73,7 @@ with no movement, or the hook delivered nothing), the session ends in
 
 ## Components
 
-### `CalibrationSession` — `SpotifyGameRadio.Core/Tracking/CalibrationSession.cs`
+### `CalibrationSession` — `LogiBuddy.Core/Tracking/CalibrationSession.cs`
 
 Pure, no WPF. Unit-tested with a fake `IMouseInputSource`.
 
@@ -123,7 +123,7 @@ Step prompts (`StepChanged` payload):
 - `Failed`: the reason string.
 - `Aborted`: "Calibration cancelled."
 
-### `CalibrationCuePlayer` — `SpotifyGameRadio.App/Audio/CalibrationCuePlayer.cs`
+### `CalibrationCuePlayer` — `LogiBuddy.App/Audio/CalibrationCuePlayer.cs`
 
 Modelled on the existing `TestTonePlayer` (fading `SignalGenerator` sine
 burst so there is no click). Plays to the profile's configured output

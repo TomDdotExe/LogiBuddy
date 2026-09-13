@@ -85,7 +85,7 @@ window slider is removed (see Window).
 
 ### `FreelookTracker`
 
-`src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs`.
+`src/LogiBuddy.Core/Tracking/FreelookTracker.cs`.
 
 State to add: `float _idleSeconds;`. (An earlier draft tracked a
 `_wasHotkeyHeld` edge; implementation simplified to "force forward on
@@ -158,7 +158,7 @@ delays the ease by one block. No lock needed — matches the existing
 
 ### `CalibrationSession`
 
-`src/SpotifyGameRadio.Core/Tracking/CalibrationSession.cs`. Three marks
+`src/LogiBuddy.Core/Tracking/CalibrationSession.cs`. Three marks
 now; accumulate both axes.
 
 ```csharp
@@ -196,7 +196,7 @@ public sealed record CalibrationResult(
 
 ### `CalibrationAnnouncer` (replaces `CalibrationCuePlayer`)
 
-`src/SpotifyGameRadio.App/Audio/CalibrationAnnouncer.cs`. Delete
+`src/LogiBuddy.App/Audio/CalibrationAnnouncer.cs`. Delete
 `CalibrationCuePlayer.cs`.
 
 ```csharp

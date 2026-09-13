@@ -57,7 +57,7 @@ Recenter and the vehicle toggle need **tap** semantics: fire once per press,
 not once per poll tick while held.
 
 ```csharp
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 /// Polls a single rebindable key at the same ~8ms cadence as Win32MouseHook's
 /// hotkey poll, and raises Pressed once per press (rising edge only) — never
@@ -194,7 +194,7 @@ New rows (exact `Grid.Row` placement/renumbering is a plan detail):
 
 ## Testing
 
-### Automated (TDD, `SpotifyGameRadio.Core.Tests`)
+### Automated (TDD, `LogiBuddy.Core.Tests`)
 
 - `TapHotkeyWatcher` edge-detection: fires once on a press, does not
   re-fire while held, fires again after a release-then-press, does not fire

@@ -14,24 +14,24 @@
 
 - **Never call `SendInput`/`keybd_event`/`mouse_event`** to inject input into another process's window — confirmed anti-cheat risk (EasyAntiCheat watches for the "injected" flag on synthetic input). Text delivery is clipboard-only; the user pastes manually.
 - STT runs fully local/offline via Whisper.net — no cloud API, no network call at transcription time.
-- The Whisper model is downloaded on first use and cached under `%LOCALAPPDATA%\SpotifyGameRadio\models\` — it must **not** be added to `build/package.ps1`'s zip contents or bundled as a `<None>` item in the csproj.
+- The Whisper model is downloaded on first use and cached under `%LOCALAPPDATA%\LogiBuddy\models\` — it must **not** be added to `build/package.ps1`'s zip contents or bundled as a `<None>` item in the csproj.
 - Pin exact NuGet package versions (matches this project's existing convention — see `NAudio` and `System.Speech` in the App csproj): `Whisper.net` 1.9.1, `Whisper.net.Runtime` 1.9.1.
-- New Core types with no WPF/hardware dependency (`VocabularyPromptBuilder`, `VoiceChatSession`, the testable parts of `VoiceModelStore`) get real unit tests in `tests/SpotifyGameRadio.Core.Tests`, following the existing test project's structure (one test class per production class, `Tests` suffix). Hardware/OS/ML-touching classes (`MicrophoneCapture`, `WhisperSpeechToText`, the overlay window) are not unit-tested, consistent with `WasapiDeviceLoopbackCapture`/`Win32MouseHook` today.
-- `RadioProfile` changes follow the existing pattern exactly: a private backing field with a default value, a public property using `SetField`, and an XML doc comment. New fields must also be added to the `Load_ProfileJsonMissingNewerFields_KeepsDefaults` test in `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs` (every prior field addition did this).
+- New Core types with no WPF/hardware dependency (`VocabularyPromptBuilder`, `VoiceChatSession`, the testable parts of `VoiceModelStore`) get real unit tests in `tests/LogiBuddy.Core.Tests`, following the existing test project's structure (one test class per production class, `Tests` suffix). Hardware/OS/ML-touching classes (`MicrophoneCapture`, `WhisperSpeechToText`, the overlay window) are not unit-tested, consistent with `WasapiDeviceLoopbackCapture`/`Win32MouseHook` today.
+- `RadioProfile` changes follow the existing pattern exactly: a private backing field with a default value, a public property using `SetField`, and an XML doc comment. New fields must also be added to the `Load_ProfileJsonMissingNewerFields_KeepsDefaults` test in `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs` (every prior field addition did this).
 
 ---
 
 ## Task 1: Add Whisper.net package references and verify the build
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj`
+- Modify: `src/LogiBuddy.Core/LogiBuddy.Core.csproj`
 
 **Interfaces:**
 - Produces: `Whisper.net`/`Whisper.net.Runtime` available to all later Core tasks.
 
 - [ ] **Step 1: Add the package references**
 
-Open `src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj`. It currently looks like:
+Open `src/LogiBuddy.Core/LogiBuddy.Core.csproj`. It currently looks like:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -63,18 +63,18 @@ Change the `ItemGroup` to:
 
 - [ ] **Step 2: Restore and build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded. 0 Warning(s) 0 Error(s)` (this pulls the new packages in via the Core project reference).
 
 - [ ] **Step 3: Verify the native runtime DLLs land in the output**
 
-Run: `ls src/SpotifyGameRadio.App/bin/Debug/net8.0-windows/ | grep -i whisper` (Git Bash) or `Get-ChildItem src/SpotifyGameRadio.App/bin/Debug/net8.0-windows | Where-Object Name -like "*whisper*"` (PowerShell).
-Expected: at least one `whisper.dll`/`ggml*.dll`-style native library present alongside `SpotifyGameRadio.dll`. `Whisper.net.Runtime` ships these via its own NuGet native-asset targeting, so they should appear automatically — if this step finds nothing, stop and investigate before continuing (later tasks depend on this working).
+Run: `ls src/LogiBuddy.App/bin/Debug/net8.0-windows/ | grep -i whisper` (Git Bash) or `Get-ChildItem src/LogiBuddy.App/bin/Debug/net8.0-windows | Where-Object Name -like "*whisper*"` (PowerShell).
+Expected: at least one `whisper.dll`/`ggml*.dll`-style native library present alongside `LogiBuddy.dll`. `Whisper.net.Runtime` ships these via its own NuGet native-asset targeting, so they should appear automatically — if this step finds nothing, stop and investigate before continuing (later tasks depend on this working).
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj
+git add src/LogiBuddy.Core/LogiBuddy.Core.csproj
 git commit -m "build: add Whisper.net package references for voice chat"
 ```
 
@@ -83,22 +83,22 @@ git commit -m "build: add Whisper.net package references for voice chat"
 ## Task 2: `VoiceVocabularyDefaults` and `VocabularyPromptBuilder`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Speech/VoiceVocabularyDefaults.cs`
-- Create: `src/SpotifyGameRadio.Core/Speech/VocabularyPromptBuilder.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Speech/VocabularyPromptBuilderTests.cs`
+- Create: `src/LogiBuddy.Core/Speech/VoiceVocabularyDefaults.cs`
+- Create: `src/LogiBuddy.Core/Speech/VocabularyPromptBuilder.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Speech/VocabularyPromptBuilderTests.cs`
 
 **Interfaces:**
 - Produces: `VoiceVocabularyDefaults.Starter` (`string`, a comma-separated starter term list). `VocabularyPromptBuilder.Build(string? rawList) -> string` (static method — takes the raw text a user typed into the vocabulary box, returns the prompt string to hand to Whisper).
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/SpotifyGameRadio.Core.Tests/Speech/VocabularyPromptBuilderTests.cs`:
+Create `tests/LogiBuddy.Core.Tests/Speech/VocabularyPromptBuilderTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Speech;
+using LogiBuddy.Core.Speech;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Speech;
+namespace LogiBuddy.Core.Tests.Speech;
 
 public class VocabularyPromptBuilderTests
 {
@@ -158,15 +158,15 @@ public class VocabularyPromptBuilderTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VocabularyPromptBuilderTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VocabularyPromptBuilderTests"`
 Expected: build error — `VocabularyPromptBuilder` does not exist.
 
 - [ ] **Step 3: Write `VoiceVocabularyDefaults`**
 
-Create `src/SpotifyGameRadio.Core/Speech/VoiceVocabularyDefaults.cs`:
+Create `src/LogiBuddy.Core/Speech/VoiceVocabularyDefaults.cs`:
 
 ```csharp
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 /// Starter custom-vocabulary list seeded into a new RadioProfile, biasing
 /// Whisper's transcription toward common milsim/tactical terms. Purely a
@@ -183,10 +183,10 @@ public static class VoiceVocabularyDefaults
 
 - [ ] **Step 4: Write `VocabularyPromptBuilder`**
 
-Create `src/SpotifyGameRadio.Core/Speech/VocabularyPromptBuilder.cs`:
+Create `src/LogiBuddy.Core/Speech/VocabularyPromptBuilder.cs`:
 
 ```csharp
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 /// Turns the free-text vocabulary list a user types into the UI into the
 /// prompt string handed to Whisper as a soft bias toward those terms.
@@ -227,13 +227,13 @@ public static class VocabularyPromptBuilder
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VocabularyPromptBuilderTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VocabularyPromptBuilderTests"`
 Expected: all 7 tests pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Speech/VoiceVocabularyDefaults.cs src/SpotifyGameRadio.Core/Speech/VocabularyPromptBuilder.cs tests/SpotifyGameRadio.Core.Tests/Speech/VocabularyPromptBuilderTests.cs
+git add src/LogiBuddy.Core/Speech/VoiceVocabularyDefaults.cs src/LogiBuddy.Core/Speech/VocabularyPromptBuilder.cs tests/LogiBuddy.Core.Tests/Speech/VocabularyPromptBuilderTests.cs
 git commit -m "feat: add voice vocabulary prompt builder"
 ```
 
@@ -242,8 +242,8 @@ git commit -m "feat: add voice vocabulary prompt builder"
 ## Task 3: `RadioProfile` voice fields
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Modify: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Modify: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Consumes: `VoiceVocabularyDefaults.Starter` (Task 2).
@@ -251,24 +251,24 @@ git commit -m "feat: add voice vocabulary prompt builder"
 
 - [ ] **Step 1: Extend the legacy-defaults test (RED)**
 
-In `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`, find `Load_ProfileJsonMissingNewerFields_KeepsDefaults` and add these lines right after the existing `Assert.Equal(0f, loaded.MeasuredMaxOffAxisDegrees);` line:
+In `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`, find `Load_ProfileJsonMissingNewerFields_KeepsDefaults` and add these lines right after the existing `Assert.Equal(0f, loaded.MeasuredMaxOffAxisDegrees);` line:
 
 ```csharp
             Assert.Equal(0, loaded.VoiceRecordHotkey.VirtualKeyCode);       // default retained (unbound)
             Assert.Equal(0, loaded.VoiceConfirmHotkey.VirtualKeyCode);      // default retained (unbound)
             Assert.Equal(0, loaded.VoiceDiscardHotkey.VirtualKeyCode);      // default retained (unbound)
-            Assert.Equal(SpotifyGameRadio.Core.Speech.VoiceVocabularyDefaults.Starter, loaded.VoiceCustomVocabulary); // default retained
+            Assert.Equal(LogiBuddy.Core.Speech.VoiceVocabularyDefaults.Starter, loaded.VoiceCustomVocabulary); // default retained
             Assert.Equal("", loaded.VoiceMicrophoneDeviceId);              // default retained
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~Load_ProfileJsonMissingNewerFields"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~Load_ProfileJsonMissingNewerFields"`
 Expected: build error — `RadioProfile` has no `VoiceRecordHotkey` etc.
 
 - [ ] **Step 3: Add the fields to `RadioProfile`**
 
-In `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`, add `using SpotifyGameRadio.Core.Speech;` to the top of the file (after the existing `using` lines), then add these backing fields right after `private float _measuredMaxOffAxisDegrees = 0f;`:
+In `src/LogiBuddy.Core/Config/RadioProfile.cs`, add `using LogiBuddy.Core.Speech;` to the top of the file (after the existing `using` lines), then add these backing fields right after `private float _measuredMaxOffAxisDegrees = 0f;`:
 
 ```csharp
     private FreelookHotkey _voiceRecordHotkey = new() { VirtualKeyCode = 0 };
@@ -305,13 +305,13 @@ Then add these properties right after `MeasuredMaxOffAxisDegrees`'s property (be
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: all tests pass (this also re-verifies nothing else broke).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "feat: add RadioProfile fields for voice chat hotkeys and vocabulary"
 ```
 
@@ -320,9 +320,9 @@ git commit -m "feat: add RadioProfile fields for voice chat hotkeys and vocabula
 ## Task 4: `CaptureDeviceEnumerator` and `IMicrophoneCapture`/`MicrophoneCapture`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/CaptureDeviceEnumerator.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/IMicrophoneCapture.cs`
-- Create: `src/SpotifyGameRadio.Core/Audio/MicrophoneCapture.cs`
+- Create: `src/LogiBuddy.Core/Audio/CaptureDeviceEnumerator.cs`
+- Create: `src/LogiBuddy.Core/Audio/IMicrophoneCapture.cs`
+- Create: `src/LogiBuddy.Core/Audio/MicrophoneCapture.cs`
 
 **Interfaces:**
 - Produces: `CaptureDeviceInfo(string Id, string FriendlyName)`, `CaptureDeviceEnumerator.ListCaptureDevices() -> IReadOnlyList<CaptureDeviceInfo>`, `IMicrophoneCapture.Start(string? deviceId)`, `IMicrophoneCapture.Stop() -> float[]` (16 kHz mono).
@@ -331,12 +331,12 @@ No tests in this task — real NAudio hardware I/O, same policy as `WasapiDevice
 
 - [ ] **Step 1: `CaptureDeviceEnumerator`**
 
-Create `src/SpotifyGameRadio.Core/Audio/CaptureDeviceEnumerator.cs` (mirrors `RenderDeviceEnumerator.cs` exactly, but for capture/input devices):
+Create `src/LogiBuddy.Core/Audio/CaptureDeviceEnumerator.cs` (mirrors `RenderDeviceEnumerator.cs` exactly, but for capture/input devices):
 
 ```csharp
 using NAudio.CoreAudioApi;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public record CaptureDeviceInfo(string Id, string FriendlyName);
 
@@ -366,10 +366,10 @@ public static class CaptureDeviceEnumerator
 
 - [ ] **Step 2: `IMicrophoneCapture`**
 
-Create `src/SpotifyGameRadio.Core/Audio/IMicrophoneCapture.cs`:
+Create `src/LogiBuddy.Core/Audio/IMicrophoneCapture.cs`:
 
 ```csharp
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public interface IMicrophoneCapture
 {
@@ -388,14 +388,14 @@ public interface IMicrophoneCapture
 
 - [ ] **Step 3: `MicrophoneCapture`**
 
-Create `src/SpotifyGameRadio.Core/Audio/MicrophoneCapture.cs`. Uses NAudio's `WasapiCapture` (the microphone-input counterpart of `WasapiLoopbackCapture`, already used in `WasapiDeviceLoopbackCapture.cs`) and the same `WdlResampler` pattern `ResamplingCaptureService` uses:
+Create `src/LogiBuddy.Core/Audio/MicrophoneCapture.cs`. Uses NAudio's `WasapiCapture` (the microphone-input counterpart of `WasapiLoopbackCapture`, already used in `WasapiDeviceLoopbackCapture.cs`) and the same `WdlResampler` pattern `ResamplingCaptureService` uses:
 
 ```csharp
 using NAudio.CoreAudioApi;
 using NAudio.Dsp;
 using NAudio.Wave;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public class MicrophoneCapture : IMicrophoneCapture
 {
@@ -504,13 +504,13 @@ public class MicrophoneCapture : IMicrophoneCapture
 
 - [ ] **Step 4: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Audio/CaptureDeviceEnumerator.cs src/SpotifyGameRadio.Core/Audio/IMicrophoneCapture.cs src/SpotifyGameRadio.Core/Audio/MicrophoneCapture.cs
+git add src/LogiBuddy.Core/Audio/CaptureDeviceEnumerator.cs src/LogiBuddy.Core/Audio/IMicrophoneCapture.cs src/LogiBuddy.Core/Audio/MicrophoneCapture.cs
 git commit -m "feat: add microphone capture and capture-device enumeration"
 ```
 
@@ -519,8 +519,8 @@ git commit -m "feat: add microphone capture and capture-device enumeration"
 ## Task 5: `ISpeechToText` / `WhisperSpeechToText`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Speech/ISpeechToText.cs`
-- Create: `src/SpotifyGameRadio.Core/Speech/WhisperSpeechToText.cs`
+- Create: `src/LogiBuddy.Core/Speech/ISpeechToText.cs`
+- Create: `src/LogiBuddy.Core/Speech/WhisperSpeechToText.cs`
 
 **Interfaces:**
 - Consumes: `Whisper.net`'s `WhisperFactory`/`WhisperProcessorBuilder` (Task 1).
@@ -530,10 +530,10 @@ No tests in this task — wraps a real ML model load + inference, same policy as
 
 - [ ] **Step 1: `ISpeechToText`**
 
-Create `src/SpotifyGameRadio.Core/Speech/ISpeechToText.cs`:
+Create `src/LogiBuddy.Core/Speech/ISpeechToText.cs`:
 
 ```csharp
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 public interface ISpeechToText
 {
@@ -546,13 +546,13 @@ public interface ISpeechToText
 
 - [ ] **Step 2: `WhisperSpeechToText`**
 
-Create `src/SpotifyGameRadio.Core/Speech/WhisperSpeechToText.cs`:
+Create `src/LogiBuddy.Core/Speech/WhisperSpeechToText.cs`:
 
 ```csharp
 using System.Text;
 using Whisper.net;
 
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 /// Wraps a Whisper.net model file for one-shot transcriptions. One instance
 /// per model path; safe to reuse across many TranscribeAsync calls
@@ -589,13 +589,13 @@ public sealed class WhisperSpeechToText : ISpeechToText, IDisposable
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Speech/ISpeechToText.cs src/SpotifyGameRadio.Core/Speech/WhisperSpeechToText.cs
+git add src/LogiBuddy.Core/Speech/ISpeechToText.cs src/LogiBuddy.Core/Speech/WhisperSpeechToText.cs
 git commit -m "feat: add Whisper.net-backed speech-to-text"
 ```
 
@@ -604,8 +604,8 @@ git commit -m "feat: add Whisper.net-backed speech-to-text"
 ## Task 6: `VoiceModelStore`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Speech/VoiceModelStore.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Speech/VoiceModelStoreTests.cs`
+- Create: `src/LogiBuddy.Core/Speech/VoiceModelStore.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Speech/VoiceModelStoreTests.cs`
 
 **Interfaces:**
 - Produces: `VoiceModelStore(string modelDirectory, string expectedSha256, Func<string, CancellationToken, Task> download)` (the download delegate is injected so tests never touch the network), `.ModelPath` (`string`), `.IsDownloaded` (`bool`), `.DownloadAsync(IProgress<double>, CancellationToken) -> Task`. A parameterless convenience constructor uses the real pinned values and a real HTTP downloader.
@@ -614,13 +614,13 @@ The pinned model's SHA256 was already verified while writing this plan (download
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/SpotifyGameRadio.Core.Tests/Speech/VoiceModelStoreTests.cs`:
+Create `tests/LogiBuddy.Core.Tests/Speech/VoiceModelStoreTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Speech;
+using LogiBuddy.Core.Speech;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Speech;
+namespace LogiBuddy.Core.Tests.Speech;
 
 public class VoiceModelStoreTests
 {
@@ -688,17 +688,17 @@ public class VoiceModelStoreTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VoiceModelStoreTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VoiceModelStoreTests"`
 Expected: build error — `VoiceModelStore` does not exist.
 
 - [ ] **Step 3: Write `VoiceModelStore`**
 
-Create `src/SpotifyGameRadio.Core/Speech/VoiceModelStore.cs`:
+Create `src/LogiBuddy.Core/Speech/VoiceModelStore.cs`:
 
 ```csharp
 using System.Security.Cryptography;
 
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 /// Manages the cached Whisper model file: knows where it lives, whether a
 /// valid copy is present, and how to fetch one. Downloaded on first use
@@ -721,7 +721,7 @@ public class VoiceModelStore
     /// Real pinned model/hash, real HTTP download.
     public VoiceModelStore()
         : this(
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SpotifyGameRadio", "models"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LogiBuddy", "models"),
             ModelSha256,
             DownloadWithHttpClient)
     {
@@ -789,13 +789,13 @@ Note: the real `DownloadWithHttpClient` path doesn't report incremental progress
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VoiceModelStoreTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VoiceModelStoreTests"`
 Expected: all 4 tests pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Speech/VoiceModelStore.cs tests/SpotifyGameRadio.Core.Tests/Speech/VoiceModelStoreTests.cs
+git add src/LogiBuddy.Core/Speech/VoiceModelStore.cs tests/LogiBuddy.Core.Tests/Speech/VoiceModelStoreTests.cs
 git commit -m "feat: add VoiceModelStore for on-first-use model download"
 ```
 
@@ -804,8 +804,8 @@ git commit -m "feat: add VoiceModelStore for on-first-use model download"
 ## Task 7: `VoiceChatSession`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Speech/VoiceChatSession.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Speech/VoiceChatSessionTests.cs`
+- Create: `src/LogiBuddy.Core/Speech/VoiceChatSession.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Speech/VoiceChatSessionTests.cs`
 
 **Interfaces:**
 - Consumes: `IMicrophoneCapture` (Task 4), `ISpeechToText` (Task 5).
@@ -813,14 +813,14 @@ git commit -m "feat: add VoiceModelStore for on-first-use model download"
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/SpotifyGameRadio.Core.Tests/Speech/VoiceChatSessionTests.cs`:
+Create `tests/LogiBuddy.Core.Tests/Speech/VoiceChatSessionTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
-using SpotifyGameRadio.Core.Speech;
+using LogiBuddy.Core.Audio;
+using LogiBuddy.Core.Speech;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Speech;
+namespace LogiBuddy.Core.Tests.Speech;
 
 public class FakeMicrophoneCapture : IMicrophoneCapture
 {
@@ -979,17 +979,17 @@ public class VoiceChatSessionTests
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VoiceChatSessionTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VoiceChatSessionTests"`
 Expected: build error — `VoiceChatSession` does not exist.
 
 - [ ] **Step 3: Write `VoiceChatSession`**
 
-Create `src/SpotifyGameRadio.Core/Speech/VoiceChatSession.cs`:
+Create `src/LogiBuddy.Core/Speech/VoiceChatSession.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Audio;
+using LogiBuddy.Core.Audio;
 
-namespace SpotifyGameRadio.Core.Speech;
+namespace LogiBuddy.Core.Speech;
 
 public enum VoiceChatState { Idle, Recording, Transcribing, PreviewReady }
 
@@ -1097,18 +1097,18 @@ public sealed class VoiceChatSession : IDisposable
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj --filter "FullyQualifiedName~VoiceChatSessionTests"`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj --filter "FullyQualifiedName~VoiceChatSessionTests"`
 Expected: all 7 tests pass. (`RunTranscription` is `async void` over a `Task.FromResult`/`Task.FromException`-based fake, which completes synchronously enough that by the time `EndRecording()` returns on the test's calling thread, the continuation has already run — this is standard behavior for already-completed tasks and is why the tests can assert `session.State` immediately after `EndRecording()` without awaiting anything themselves.)
 
 - [ ] **Step 5: Run the full Core test suite**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: all tests pass (no regressions from earlier tasks).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Speech/VoiceChatSession.cs tests/SpotifyGameRadio.Core.Tests/Speech/VoiceChatSessionTests.cs
+git add src/LogiBuddy.Core/Speech/VoiceChatSession.cs tests/LogiBuddy.Core.Tests/Speech/VoiceChatSessionTests.cs
 git commit -m "feat: add VoiceChatSession record/transcribe/preview state machine"
 ```
 
@@ -1117,7 +1117,7 @@ git commit -m "feat: add VoiceChatSession record/transcribe/preview state machin
 ## Task 8: Themed `TextBox` style
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/Styles/Theme.xaml`
+- Modify: `src/LogiBuddy.App/Styles/Theme.xaml`
 
 **Interfaces:**
 - Produces: an implicit `<Style TargetType="TextBox">` usable by any `TextBox` in the app, and a `CaretBrush`-aware dark theme.
@@ -1126,7 +1126,7 @@ Nothing in the theme today styles `TextBox` (only sliders/buttons/checkboxes/com
 
 - [ ] **Step 1: Add the style**
 
-Open `src/SpotifyGameRadio.App/Styles/Theme.xaml`. Find the `ToolTip` style near the end of the file (right before the `Expander`/`ExpanderHeaderToggle` styles) and insert this new `TextBox` style directly after it:
+Open `src/LogiBuddy.App/Styles/Theme.xaml`. Find the `ToolTip` style near the end of the file (right before the `Expander`/`ExpanderHeaderToggle` styles) and insert this new `TextBox` style directly after it:
 
 ```xml
     <Style TargetType="TextBox">
@@ -1163,13 +1163,13 @@ Open `src/SpotifyGameRadio.App/Styles/Theme.xaml`. Find the `ToolTip` style near
 
 - [ ] **Step 2: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/Styles/Theme.xaml
+git add src/LogiBuddy.App/Styles/Theme.xaml
 git commit -m "feat: add themed TextBox style"
 ```
 
@@ -1178,8 +1178,8 @@ git commit -m "feat: add themed TextBox style"
 ## Task 9: `VoicePreviewOverlay` window
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml`
-- Create: `src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml.cs`
+- Create: `src/LogiBuddy.App/VoicePreviewOverlay.xaml`
+- Create: `src/LogiBuddy.App/VoicePreviewOverlay.xaml.cs`
 
 **Interfaces:**
 - Produces: `VoicePreviewOverlay.SetText(string)`, `.SetHint(string)`.
@@ -1188,10 +1188,10 @@ No tests — a WPF window, same policy as `MainWindow`/`HotkeyCaptureControl` (n
 
 - [ ] **Step 1: XAML**
 
-Create `src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml`:
+Create `src/LogiBuddy.App/VoicePreviewOverlay.xaml`:
 
 ```xml
-<Window x:Class="SpotifyGameRadio.App.VoicePreviewOverlay"
+<Window x:Class="LogiBuddy.App.VoicePreviewOverlay"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
@@ -1211,12 +1211,12 @@ Create `src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml`:
 
 - [ ] **Step 2: Code-behind**
 
-Create `src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml.cs`:
+Create `src/LogiBuddy.App/VoicePreviewOverlay.xaml.cs`:
 
 ```csharp
 using System.Windows;
 
-namespace SpotifyGameRadio.App;
+namespace LogiBuddy.App;
 
 public partial class VoicePreviewOverlay : Window
 {
@@ -1241,13 +1241,13 @@ public partial class VoicePreviewOverlay : Window
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml src/SpotifyGameRadio.App/VoicePreviewOverlay.xaml.cs
+git add src/LogiBuddy.App/VoicePreviewOverlay.xaml src/LogiBuddy.App/VoicePreviewOverlay.xaml.cs
 git commit -m "feat: add voice chat preview overlay window"
 ```
 
@@ -1256,7 +1256,7 @@ git commit -m "feat: add voice chat preview overlay window"
 ## Task 10: `MainViewModel` wiring
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
 
 **Interfaces:**
 - Consumes: `VoiceChatSession`, `MicrophoneCapture`, `WhisperSpeechToText`, `VoiceModelStore`, `CaptureDeviceEnumerator` (Core, earlier tasks), `VoicePreviewOverlay` (Task 9), `VocabularyPromptBuilder` (Task 2).
@@ -1266,10 +1266,10 @@ This task has no new automated tests (`MainViewModel` has none today — see the
 
 - [ ] **Step 1: Add `using` and new fields**
 
-In `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`, add to the `using` block at the top:
+In `src/LogiBuddy.App/ViewModels/MainViewModel.cs`, add to the `using` block at the top:
 
 ```csharp
-using SpotifyGameRadio.Core.Speech;
+using LogiBuddy.Core.Speech;
 ```
 
 Add these fields right after `private readonly CalibrationAnnouncer _announcer;`:
@@ -1352,7 +1352,7 @@ Voice chat has no dependency on the radio pipeline or mouse hook (unlike Recente
 
 ```csharp
         _voiceSession = new VoiceChatSession(
-            new SpotifyGameRadio.Core.Audio.MicrophoneCapture(),
+            new LogiBuddy.Core.Audio.MicrophoneCapture(),
             CreateSpeechToText(),
             () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary));
         _voiceSession.StateChanged += OnVoiceStateChanged;
@@ -1495,13 +1495,13 @@ The voice watchers/session are constructor-scoped (like `_announcer`), not `Star
 
 - [ ] **Step 9: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: wire voice chat hotkeys, session, and overlay into MainViewModel"
 ```
 
@@ -1510,15 +1510,15 @@ git commit -m "feat: wire voice chat hotkeys, session, and overlay into MainView
 ## Task 11: "Voice Chat" card in `MainWindow.xaml`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs` (one small addition — see Step 2)
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs` (one small addition — see Step 2)
 
 **Interfaces:**
 - Consumes: everything from Task 10's bindable properties/commands, plus `Profile.VoiceRecordHotkey`/`VoiceConfirmHotkey`/`VoiceDiscardHotkey`/`VoiceCustomVocabulary`/`VoiceMicrophoneDeviceId` (Task 3).
 
 - [ ] **Step 1: Add the card**
 
-In `src/SpotifyGameRadio.App/MainWindow.xaml`, add a new card to the right column's `StackPanel` (`Grid.Column="2"`), after the closing `</Border>` of the "Spatial Position" card and before that column's closing `</StackPanel>`:
+In `src/LogiBuddy.App/MainWindow.xaml`, add a new card to the right column's `StackPanel` (`Grid.Column="2"`), after the closing `</Border>` of the "Spatial Position" card and before that column's closing `</StackPanel>`:
 
 ```xml
                     <Border Style="{StaticResource CardPanel}">
@@ -1605,18 +1605,18 @@ Back in `MainWindow.xaml`, change the "Download voice model" row's `Visibility` 
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded.`
 
 - [ ] **Step 4: Run the app and visually check the new card**
 
-Run: `dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: a new "Voice Chat" card appears in the right column with three hotkey rows, a microphone dropdown, a vocabulary text box (pre-filled with the starter list), and a "Download voice model" button. Confirm the window doesn't clip anything — the right column may now be taller than the left; if so this is a repeat of the same height-clipping issue handled before (bump `Window.Height` in `MainWindow.xaml` if needed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/MainWindow.xaml src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/MainWindow.xaml src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: add Voice Chat card to MainWindow"
 ```
 
@@ -1628,17 +1628,17 @@ git commit -m "feat: add Voice Chat card to MainWindow"
 
 - [ ] **Step 1: Run the full automated test suite**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests/SpotifyGameRadio.Core.Tests.csproj`
+Run: `dotnet test tests/LogiBuddy.Core.Tests/LogiBuddy.Core.Tests.csproj`
 Expected: all tests pass, including every test added in Tasks 2, 3, 6, and 7.
 
 - [ ] **Step 2: Full clean build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: `Build succeeded. 0 Warning(s) 0 Error(s)`.
 
 - [ ] **Step 3: Manual verification (matches the spec's manual verification list)**
 
-Run the app (`dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`) and walk through:
+Run the app (`dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`) and walk through:
 
 1. First run: Voice Chat card shows the download button; download it; confirm it becomes usable (button disappears, "Voice model ready." appears) without a restart.
 2. Bind Record/Confirm/Discard to three different keys.
@@ -1653,7 +1653,7 @@ Run the app (`dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App
 - [ ] **Step 4: Confirm the release zip doesn't bundle the model**
 
 Run: `./build/package.ps1 -Version 0.4.0` (or the next appropriate version), then inspect the output zip's contents.
-Expected: the zip contains the Whisper.net native runtime DLLs (from Task 1's automatic transitive copy) but **not** `ggml-small.en.bin` — that file only ever exists under `%LOCALAPPDATA%\SpotifyGameRadio\models\` on a machine that has actually clicked "Download voice model". If the model somehow appears in the zip, something in the build is picking up a locally-cached copy — find and fix it (most likely cause: a stray `<None Include="...">` was added somewhere it shouldn't have been; there should be none for this feature).
+Expected: the zip contains the Whisper.net native runtime DLLs (from Task 1's automatic transitive copy) but **not** `ggml-small.en.bin` — that file only ever exists under `%LOCALAPPDATA%\LogiBuddy\models\` on a machine that has actually clicked "Download voice model". If the model somehow appears in the zip, something in the build is picking up a locally-cached copy — find and fix it (most likely cause: a stray `<None Include="...">` was added somewhere it shouldn't have been; there should be none for this feature).
 
 - [ ] **Step 5: Final commit**
 

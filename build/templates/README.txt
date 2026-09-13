@@ -1,4 +1,4 @@
-Spotify Game Radio v{{VERSION}}
+LogiBuddy v{{VERSION}}
 ==============================
 
 WHAT IT IS
@@ -14,7 +14,7 @@ REQUIREMENTS
 
 RUNNING
   1. Unzip this folder anywhere (for example, your Desktop).
-  2. Run SpotifyGameRadio.exe inside the SpotifyGameRadio folder.
+  2. Run LogiBuddy.exe inside the LogiBuddy folder.
   3. See SETUP.md for first-time configuration.
 
 OPTIONAL: SOURCE ROUTING

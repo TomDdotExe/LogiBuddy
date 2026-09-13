@@ -32,7 +32,7 @@ build/dist/
 build/third-party/
 
 # Fetched native binary (see build/fetch-phonon.ps1)
-src/SpotifyGameRadio.App/runtimes/
+src/LogiBuddy.App/runtimes/
 
 # Claude Code local state
 .claude/

@@ -14,7 +14,7 @@
   - **Developers:** run `./build/fetch-phonon.ps1` once. It downloads the
     pinned Steam Audio 4.8.1 release, verifies its checksum, places the
     DLL at
-    `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`, and
+    `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll`, and
     fetches the licence texts into `build/third-party/`.
   Without the DLL the app still runs but falls back to simple stereo
   panning instead of true HRTF. The 4.x API is required — the project's
@@ -29,7 +29,7 @@
 
 ## Running
 
-    dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj
+    dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj
 
 ## First-time use
 
@@ -57,7 +57,7 @@
 - A few settings still have no UI controls: output device selection and
   the profile name (so, profile switching too). To change them, click
   Save Profile once to create the file, then edit
-  `%APPDATA%\SpotifyGameRadio\Profiles\<name>.json` directly and
+  `%APPDATA%\LogiBuddy\Profiles\<name>.json` directly and
   restart the app.
 - Vertical look (pitch) has no audible effect on the spatialized audio
   — only left/right (yaw) does.

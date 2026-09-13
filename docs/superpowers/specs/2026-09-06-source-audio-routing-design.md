@@ -45,7 +45,7 @@ automatically on Start and undo it on Stop.
 
 ## Architecture
 
-Three new units in `SpotifyGameRadio.Core/Audio/`, plus profile and
+Three new units in `LogiBuddy.Core/Audio/`, plus profile and
 view-model wiring.
 
 ### AudioPolicyConfigInterop (new)
@@ -150,7 +150,7 @@ before building the pipeline:**
    first, then Start." and return.
 4. For each pid: `previous = router.GetCurrentRoute(pid)`; collect
    into a `RouteRecoveryRecord`. Persist the record to
-   `%AppData%/SpotifyGameRadio/route-recovery.json` **before** the
+   `%AppData%/LogiBuddy/route-recovery.json` **before** the
    first `RouteProcess` call.
 5. For each pid: `router.RouteProcess(pid, targetDeviceId)`. On
    `SourceRoutingException` → restore any pids already routed, delete
@@ -236,7 +236,7 @@ button's handler) repopulates the device list.
 
 ## Testing
 
-Automated (xUnit, `SpotifyGameRadio.Core.Tests`):
+Automated (xUnit, `LogiBuddy.Core.Tests`):
 
 - `RenderDeviceEnumeratorTests` — `LooksLikeVirtualCable` true for
   representative virtual-cable names ("CABLE Input (VB-Audio Virtual
@@ -256,7 +256,7 @@ Manual checklist (documented in `docs/SETUP.md`):
 3. Click Stop. Volume Mixer shows Spotify back on the default device.
 4. Click Start again, then kill the app process (Task Manager).
    Relaunch. Volume Mixer shows Spotify reverted to default; no
-   `route-recovery.json` left in `%AppData%/SpotifyGameRadio`.
+   `route-recovery.json` left in `%AppData%/LogiBuddy`.
 5. Set `AutoRouteSource` off. Start behaves as before (both streams
    audible).
 6. On a machine reporting a non-Win11 build (or with the build check

@@ -38,8 +38,8 @@ audio session directly via NAudio, replacing the manual-mixer-mute step.
 ### Task 1: RadioProfile fields + legacy-load tolerance
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Produces: `RadioProfile.RecenterHotkey` (`FreelookHotkey`, default
@@ -50,7 +50,7 @@ audio session directly via NAudio, replacing the manual-mixer-mute step.
 
 - [ ] **Step 1: Write the failing test**
 
-Open `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs` and find
+Open `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs` and find
 `Load_ProfileJsonMissingNewerFields_KeepsDefaults`. Add these four lines
 right after the existing `Assert.False(loaded.FreelookAlwaysOn);` line:
 
@@ -110,7 +110,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "feat: add RecenterHotkey, VehicleToggleHotkey, VehicleExitDelaySeconds, AutoMuteSource to RadioProfile"
 ```
 
@@ -119,9 +119,9 @@ git commit -m "feat: add RecenterHotkey, VehicleToggleHotkey, VehicleExitDelaySe
 ### Task 2: TapHotkeyWatcher (global tap-hotkey polling)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Tracking/Win32KeyStateSource.cs`
-- Create: `src/SpotifyGameRadio.Core/Tracking/TapHotkeyWatcher.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Tracking/TapHotkeyWatcherTests.cs`
+- Create: `src/LogiBuddy.Core/Tracking/Win32KeyStateSource.cs`
+- Create: `src/LogiBuddy.Core/Tracking/TapHotkeyWatcher.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Tracking/TapHotkeyWatcherTests.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.RecenterHotkey` / `VehicleToggleHotkey` (Task 1,
@@ -133,14 +133,14 @@ git commit -m "feat: add RecenterHotkey, VehicleToggleHotkey, VehicleExitDelaySe
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/SpotifyGameRadio.Core.Tests/Tracking/TapHotkeyWatcherTests.cs`:
+Create `tests/LogiBuddy.Core.Tests/Tracking/TapHotkeyWatcherTests.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Config;
+using LogiBuddy.Core.Tracking;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Tracking;
+namespace LogiBuddy.Core.Tests.Tracking;
 
 public class FakeKeyStateSource : IKeyStateSource
 {
@@ -246,12 +246,12 @@ Expected: FAIL — `TapHotkeyWatcher`/`IKeyStateSource` do not exist.
 
 - [ ] **Step 3: Implement `IKeyStateSource` + `Win32KeyStateSource`**
 
-Create `src/SpotifyGameRadio.Core/Tracking/Win32KeyStateSource.cs`:
+Create `src/LogiBuddy.Core/Tracking/Win32KeyStateSource.cs`:
 
 ```csharp
 using System.Runtime.InteropServices;
 
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 public interface IKeyStateSource
 {
@@ -271,12 +271,12 @@ public class Win32KeyStateSource : IKeyStateSource
 
 - [ ] **Step 4: Implement `TapHotkeyWatcher`**
 
-Create `src/SpotifyGameRadio.Core/Tracking/TapHotkeyWatcher.cs`:
+Create `src/LogiBuddy.Core/Tracking/TapHotkeyWatcher.cs`:
 
 ```csharp
-using SpotifyGameRadio.Core.Config;
+using LogiBuddy.Core.Config;
 
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 /// Polls a single rebindable key and raises Pressed once per press (rising
 /// edge only) — unlike Win32MouseHook's hold-style freelook hotkey, this
@@ -345,7 +345,7 @@ Expected: PASS (5 tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Tracking/Win32KeyStateSource.cs src/SpotifyGameRadio.Core/Tracking/TapHotkeyWatcher.cs tests/SpotifyGameRadio.Core.Tests/Tracking/TapHotkeyWatcherTests.cs
+git add src/LogiBuddy.Core/Tracking/Win32KeyStateSource.cs src/LogiBuddy.Core/Tracking/TapHotkeyWatcher.cs tests/LogiBuddy.Core.Tests/Tracking/TapHotkeyWatcherTests.cs
 git commit -m "feat: add TapHotkeyWatcher for edge-triggered global hotkeys"
 ```
 
@@ -354,8 +354,8 @@ git commit -m "feat: add TapHotkeyWatcher for edge-triggered global hotkeys"
 ### Task 3: RadioPipeline vehicle-mute stage
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`
+- Modify: `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`
 
 **Interfaces:**
 - Produces: `RadioPipeline.SetVehicleMuted(bool muted)` — sets an internal,
@@ -364,7 +364,7 @@ git commit -m "feat: add TapHotkeyWatcher for edge-triggered global hotkeys"
 
 - [ ] **Step 1: Write the failing tests**
 
-In `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`, add
+In `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`, add
 after `StereoWidthZero_CollapsesPannedOutputToEqualChannels`:
 
 ```csharp
@@ -453,7 +453,7 @@ Expected: PASS (all, including the 2 new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs
+git add src/LogiBuddy.Core/Pipeline/RadioPipeline.cs tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs
 git commit -m "feat: add RadioPipeline.SetVehicleMuted, independent of Volume"
 ```
 
@@ -462,7 +462,7 @@ git commit -m "feat: add RadioPipeline.SetVehicleMuted, independent of Volume"
 ### Task 4: Source session auto-mute (NAudio)
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Audio/SourceSessionMuter.cs`
+- Create: `src/LogiBuddy.Core/Audio/SourceSessionMuter.cs`
 
 **Interfaces:**
 - Produces: `ISourceSessionMuter` (`void Mute(string processName)`,
@@ -474,13 +474,13 @@ in Task 7's manual pass.
 
 - [ ] **Step 1: Implement**
 
-Create `src/SpotifyGameRadio.Core/Audio/SourceSessionMuter.cs`:
+Create `src/LogiBuddy.Core/Audio/SourceSessionMuter.cs`:
 
 ```csharp
 using NAudio.CoreAudioApi;
 using System.Diagnostics;
 
-namespace SpotifyGameRadio.Core.Audio;
+namespace LogiBuddy.Core.Audio;
 
 public interface ISourceSessionMuter
 {
@@ -533,13 +533,13 @@ public sealed class NAudioSourceSessionMuter : ISourceSessionMuter
 
 - [ ] **Step 2: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.Core/SpotifyGameRadio.Core.csproj`
+Run: `dotnet build src/LogiBuddy.Core/LogiBuddy.Core.csproj`
 Expected: succeeds, 0 warnings.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Audio/SourceSessionMuter.cs
+git add src/LogiBuddy.Core/Audio/SourceSessionMuter.cs
 git commit -m "feat: add NAudioSourceSessionMuter for automatic source-session muting"
 ```
 
@@ -548,7 +548,7 @@ git commit -m "feat: add NAudioSourceSessionMuter for automatic source-session m
 ### Task 5: MainViewModel wiring
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.RecenterHotkey` / `VehicleToggleHotkey` /
@@ -754,7 +754,7 @@ In `Stop()`, right after `_uiTimer?.Stop(); _uiTimer = null;`, add:
 
 - [ ] **Step 11: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: succeeds, 0 warnings. (Close the running app first if the exe is locked.)
 
 - [ ] **Step 12: Run the full test suite**
@@ -765,7 +765,7 @@ Expected: all green (no MainViewModel tests, but confirm nothing else regressed)
 - [ ] **Step 13: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: wire Recenter/vehicle-toggle hotkeys and source auto-mute in MainViewModel"
 ```
 
@@ -774,7 +774,7 @@ git commit -m "feat: wire Recenter/vehicle-toggle hotkeys and source auto-mute i
 ### Task 6: MainWindow.xaml — new controls
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `Profile.RecenterHotkey` / `VehicleToggleHotkey` /
@@ -843,7 +843,7 @@ onward by +4: mouse sensitivity `12→16`, max yaw `13→17`, max pitch
 
 - [ ] **Step 4: Build and eyeball**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: succeeds. The window is currently `Height="800"`; if the four
 extra rows push content past the window bottom, bump it to `950` and
 rebuild.
@@ -851,7 +851,7 @@ rebuild.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/MainWindow.xaml
 git commit -m "feat: add Recenter/vehicle-toggle hotkey controls, exit delay, and auto-mute checkbox to the window"
 ```
 
@@ -868,7 +868,7 @@ Expected: build 0 warnings; all tests green.
 
 - [ ] **Step 2: Launch**
 
-Close any running instance, then launch `src/SpotifyGameRadio.App/bin/Debug/net8.0-windows/SpotifyGameRadio.App.exe`.
+Close any running instance, then launch `src/LogiBuddy.App/bin/Debug/net8.0-windows/LogiBuddy.App.exe`.
 
 - [ ] **Step 3: Hand off the manual checklist**
 

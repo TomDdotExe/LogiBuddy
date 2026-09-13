@@ -12,9 +12,9 @@ Status: Implemented (commits 9feb719, da931ae, de05337)
   `fetch-phonon.ps1` downloads `LICENSE.md` from the pinned git tag
   (`.../steam-audio/v4.8.1/LICENSE.md`, hash-pinned) and extracts
   `THIRDPARTY.md` from the archive. `THIRD-PARTY-NOTICES.txt` ships both.
-- Added `<AssemblyName>SpotifyGameRadio</AssemblyName>` to the App csproj
-  so the shipped executable is `SpotifyGameRadio.exe`, not
-  `SpotifyGameRadio.App.exe`. Nothing derives paths from the assembly
+- Added `<AssemblyName>LogiBuddy</AssemblyName>` to the App csproj
+  so the shipped executable is `LogiBuddy.exe`, not
+  `LogiBuddy.App.exe`. Nothing derives paths from the assembly
   name (profile dir, debug log path are string literals).
 - `.ps1` here-strings are kept ASCII-only — Windows PowerShell 5.1 reads
   script files as ANSI and mangles non-ASCII punctuation.
@@ -62,13 +62,13 @@ build/
   third-party/              # (gitignored) steam-audio-LICENSE.md extracted by fetch
 ```
 
-Plus edits to `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`,
+Plus edits to `src/LogiBuddy.App/LogiBuddy.App.csproj`,
 `.gitignore`, and `docs/SETUP.md`.
 
 ## Component: `build/fetch-phonon.ps1`
 
 **Purpose:** guarantee that
-`src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll` exists and
+`src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll` exists and
 is exactly the pinned Steam Audio build. Idempotent; no network I/O after
 the first successful run.
 
@@ -104,7 +104,7 @@ the first successful run.
    changed between releases). If not found, hard-fail with a message
    listing the archive's directory entries.
 5. Extract that single entry to
-   `src/SpotifyGameRadio.App/runtimes/win-x64/native/phonon.dll`,
+   `src/LogiBuddy.App/runtimes/win-x64/native/phonon.dll`,
    creating parent folders.
 6. Find the archive entry matching `*/LICENSE.md` (or `*/LICENSE`) and
    extract it to `build/third-party/steam-audio-LICENSE.md`, creating
@@ -141,7 +141,7 @@ I/O failure.
 3. Remove and recreate `build/.staging`.
 4. Publish:
    ```
-   dotnet publish src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj `
+   dotnet publish src/LogiBuddy.App/LogiBuddy.App.csproj `
      -c $Configuration `
      -p:Version=$Version -p:InformationalVersion=$Version `
      --nologo `
@@ -156,10 +156,10 @@ I/O failure.
    Hard-fail otherwise — this catches a broken csproj copy before a
    silent-fallback zip is ever produced.
 6. Assemble the zip tree under `build/.staging/zip/`:
-   - `SpotifyGameRadio/` ← full contents of `build/.staging/app`
+   - `LogiBuddy/` ← full contents of `build/.staging/app`
    - `README.txt` ← `build/templates/README.txt` with `{{VERSION}}`
      replaced by `$Version`. Content covers:
-     - Unzip anywhere and run `SpotifyGameRadio.exe`.
+     - Unzip anywhere and run `LogiBuddy.exe`.
      - Prerequisite: **.NET 8 Desktop Runtime** (`https://dotnet.microsoft.com/download/dotnet/8.0`)
        — a framework-dependent app shows Windows' own "download .NET"
        prompt if it is missing, but the readme states it up front.
@@ -171,7 +171,7 @@ I/O failure.
      naming Steam Audio and its MIT license, followed by the verbatim
      contents of `build/third-party/steam-audio-LICENSE.md`.
 7. `Compress-Archive -Path build/.staging/zip/* -DestinationPath
-   <OutputDir>/SpotifyGameRadio-v<Version>-win-x64.zip -Force`.
+   <OutputDir>/LogiBuddy-v<Version>-win-x64.zip -Force`.
 8. Print the final zip path, its size, and its SHA256.
 
 **Exit codes:** 0 on success; non-zero on any step failure
@@ -179,7 +179,7 @@ I/O failure.
 
 ## Component: repo changes outside `build/`
 
-### `src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+### `src/LogiBuddy.App/LogiBuddy.App.csproj`
 
 - Add `<Version>0.1.0</Version>` to the existing `<PropertyGroup>` as a
   floor so plain dev builds are not `1.0.0.0`. `package.ps1` overrides it
@@ -201,7 +201,7 @@ build/dist/
 build/third-party/
 
 # Fetched native binary (see build/fetch-phonon.ps1)
-src/SpotifyGameRadio.App/runtimes/
+src/LogiBuddy.App/runtimes/
 
 # Claude Code local state
 .claude/
@@ -239,12 +239,12 @@ manual checklist run on a clean working tree with the local
    the archive hash mismatch and does not extract.
 3. `./build/package.ps1 -Version 0.1.0-test` → publish succeeds, the
    phonon guard passes, a zip is produced in `build/dist/`.
-4. Unzip to a fresh folder and run `SpotifyGameRadio.exe` → the app
+4. Unzip to a fresh folder and run `LogiBuddy.exe` → the app
    launches and `%TEMP%\sgr-capture-debug.log` / runtime behaviour shows
    the HRTF path, not the `StereoPanSpatializer` fallback.
 5. `./build/package.ps1 -Version bogus` → rejected before any build or
    download work.
-6. Inspect the zip: contains `SpotifyGameRadio/` (with `phonon.dll` next
+6. Inspect the zip: contains `LogiBuddy/` (with `phonon.dll` next
    to the exe), `README.txt` with the version substituted, `SETUP.md`,
    and `THIRD-PARTY-NOTICES.txt` containing the Steam Audio MIT license
    text.

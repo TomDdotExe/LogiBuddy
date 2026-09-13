@@ -26,7 +26,7 @@ note below), discard, or re-record by holding the record hotkey again.
 | Text delivery | Clipboard-only, manual paste — **not** auto-paste via `SendInput`. See "Anti-cheat note" below |
 | Hotkey scheme | Three separate hotkeys: hold-to-record, tap-to-confirm, tap-to-discard. Re-record = hold record again while a preview is showing |
 | Vocabulary tuning | Bundle a mid-size model (`small.en`) + a user-editable custom vocabulary list, seeded with common milsim terms, applied as a Whisper "initial prompt" |
-| Model distribution | Downloaded on first use, not bundled in the release zip — cached under `%LOCALAPPDATA%\SpotifyGameRadio\models\`, verified by pinned SHA256 (mirrors `fetch-phonon.ps1`'s pattern, just at runtime) |
+| Model distribution | Downloaded on first use, not bundled in the release zip — cached under `%LOCALAPPDATA%\LogiBuddy\models\`, verified by pinned SHA256 (mirrors `fetch-phonon.ps1`'s pattern, just at runtime) |
 
 ### Anti-cheat note
 
@@ -43,7 +43,7 @@ process's window.**
 
 ## Components
 
-### `IMicrophoneCapture` / `MicrophoneCapture` — `SpotifyGameRadio.Core/Audio/MicrophoneCapture.cs`
+### `IMicrophoneCapture` / `MicrophoneCapture` — `LogiBuddy.Core/Audio/MicrophoneCapture.cs`
 
 ```csharp
 public interface IMicrophoneCapture
@@ -65,7 +65,7 @@ mono (average channels) and resamples to 16000 Hz using the same
 returns the flat float array. Not unit-tested (real hardware/NAudio, same
 as `WasapiDeviceLoopbackCapture`).
 
-### `ISpeechToText` / `WhisperSpeechToText` — `SpotifyGameRadio.Core/Speech/`
+### `ISpeechToText` / `WhisperSpeechToText` — `LogiBuddy.Core/Speech/`
 
 ```csharp
 public interface ISpeechToText
@@ -87,12 +87,12 @@ practical token budget for the prompt — cap at roughly 200 characters
 doesn't need to hold much) and drop terms past that, keeping the earliest
 ones in the user's list.
 
-### `VoiceModelStore` — `SpotifyGameRadio.Core/Speech/VoiceModelStore.cs`
+### `VoiceModelStore` — `LogiBuddy.Core/Speech/VoiceModelStore.cs`
 
 ```csharp
 public class VoiceModelStore
 {
-    public string ModelPath { get; } // %LOCALAPPDATA%\SpotifyGameRadio\models\ggml-small.en.bin
+    public string ModelPath { get; } // %LOCALAPPDATA%\LogiBuddy\models\ggml-small.en.bin
     public bool IsDownloaded { get; } // File.Exists + SHA256 matches the pinned hash
     public Task DownloadAsync(IProgress<double> progress, CancellationToken ct);
 }
@@ -103,7 +103,7 @@ Pinned URL + SHA256 constants, analogous to `fetch-phonon.ps1`'s
 verifies the hash, then moves it into place — a failed/cancelled download
 never leaves a corrupt file where `IsDownloaded` would wrongly report true.
 
-### `VoiceChatSession` — `SpotifyGameRadio.Core/Speech/VoiceChatSession.cs`
+### `VoiceChatSession` — `LogiBuddy.Core/Speech/VoiceChatSession.cs`
 
 Modelled directly on `CalibrationSession`: pure, no WPF, unit-tested with
 fakes.
@@ -152,7 +152,7 @@ public sealed class VoiceChatSession : IDisposable
 - `Dispose()` cancels any in-flight transcription and is safe to call
   twice.
 
-### Overlay window — `SpotifyGameRadio.App/VoicePreviewOverlay.xaml(.cs)`
+### Overlay window — `LogiBuddy.App/VoicePreviewOverlay.xaml(.cs)`
 
 A small, borderless (`WindowStyle="None"`), `Topmost="True"`,
 `ShowInTaskbar="False"` window, themed to match the rest of the app.

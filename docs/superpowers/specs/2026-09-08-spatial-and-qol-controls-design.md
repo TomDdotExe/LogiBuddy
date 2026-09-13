@@ -147,7 +147,7 @@ visually).
 
 ## Testing
 
-### Automated (TDD, `SpotifyGameRadio.Core.Tests`)
+### Automated (TDD, `LogiBuddy.Core.Tests`)
 
 - `StereoWidthTests`:
   - `width == 1` leaves the buffer untouched

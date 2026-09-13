@@ -18,15 +18,15 @@
 - Live scalar reads on the audio thread rely on atomic single-`float` writes; no locks added.
 - `Volume` range 0–1 (attenuate only). `StereoWidth` UI range 0–2, clamped in the pipeline to [0, 4]. `Volume` clamped to [0, 1].
 - Pipeline stage order: width first, then volume.
-- Follow existing patterns: profile fields via `SetField`; live props routed through `LiveProfileProperties`; tests in `SpotifyGameRadio.Core.Tests`.
+- Follow existing patterns: profile fields via `SetField`; live props routed through `LiveProfileProperties`; tests in `LogiBuddy.Core.Tests`.
 
 ---
 
 ### Task 1: RadioProfile fields + legacy-load tolerance
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Produces: `RadioProfile.Volume` (`float`, default `1.0f`), `RadioProfile.StereoWidth` (`float`, default `1.0f`), `RadioProfile.FreelookAlwaysOn` (`bool`, default `false`) — all raising `PropertyChanged` via `SetField`.
@@ -74,7 +74,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "feat: add Volume, StereoWidth, FreelookAlwaysOn to RadioProfile"
 ```
 
@@ -83,19 +83,19 @@ git commit -m "feat: add Volume, StereoWidth, FreelookAlwaysOn to RadioProfile"
 ### Task 2: StereoWidth DSP helper
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Dsp/StereoWidth.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Dsp/StereoWidthTests.cs`
+- Create: `src/LogiBuddy.Core/Dsp/StereoWidth.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Dsp/StereoWidthTests.cs`
 
 **Interfaces:**
-- Produces: `static void SpotifyGameRadio.Core.Dsp.StereoWidth.Apply(float[] interleaved, int frameCount, float width)` — in-place mid/side on interleaved stereo, `frameCount` = number of L/R pairs.
+- Produces: `static void LogiBuddy.Core.Dsp.StereoWidth.Apply(float[] interleaved, int frameCount, float width)` — in-place mid/side on interleaved stereo, `frameCount` = number of L/R pairs.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```csharp
-using SpotifyGameRadio.Core.Dsp;
+using LogiBuddy.Core.Dsp;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Dsp;
+namespace LogiBuddy.Core.Tests.Dsp;
 
 public class StereoWidthTests
 {
@@ -147,7 +147,7 @@ Expected: FAIL — `StereoWidth` does not exist.
 - [ ] **Step 3: Implement**
 
 ```csharp
-namespace SpotifyGameRadio.Core.Dsp;
+namespace LogiBuddy.Core.Dsp;
 
 /// Mid/side stereo-width adjustment. Real-time safe: no allocation, in place.
 public static class StereoWidth
@@ -179,7 +179,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Dsp/StereoWidth.cs tests/SpotifyGameRadio.Core.Tests/Dsp/StereoWidthTests.cs
+git add src/LogiBuddy.Core/Dsp/StereoWidth.cs tests/LogiBuddy.Core.Tests/Dsp/StereoWidthTests.cs
 git commit -m "feat: add StereoWidth mid/side DSP helper"
 ```
 
@@ -188,8 +188,8 @@ git commit -m "feat: add StereoWidth mid/side DSP helper"
 ### Task 3: RadioPipeline width + volume stages
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`
+- Modify: `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`
 
 **Interfaces:**
 - Consumes: `StereoWidth.Apply` (Task 2); `RadioProfile.Volume`, `RadioProfile.StereoWidth` (Task 1).
@@ -240,7 +240,7 @@ public void StereoWidthZero_CollapsesPannedOutputToEqualChannels()
     var capture = new FakeCaptureService();
     var output = new FakeOutputService();
     var profile = new RadioProfile { WetDryMix = 0f, StereoWidth = 0f };
-    var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+    var fakeInput = new LogiBuddy.Core.Tests.Tracking.FakeMouseInputSource();
     var tracker = new FreelookTracker(fakeInput, profile);
     var effectChain = new RadioEffectChain(48000f);
     effectChain.ApplyProfile(profile);
@@ -289,7 +289,7 @@ if (_volume != 1f)
         _stereoBlock[s] *= _volume;
 ```
 
-Add `using SpotifyGameRadio.Core.Dsp;` if not present (it already is).
+Add `using LogiBuddy.Core.Dsp;` if not present (it already is).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -299,7 +299,7 @@ Expected: PASS (all, including the 2 new).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs
+git add src/LogiBuddy.Core/Pipeline/RadioPipeline.cs tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs
 git commit -m "feat: apply stereo width and volume in the pipeline output stage"
 ```
 
@@ -308,8 +308,8 @@ git commit -m "feat: apply stereo width and volume in the pipeline output stage"
 ### Task 4: FreelookTracker always-on gate + Recenter
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs`
+- Modify: `src/LogiBuddy.Core/Tracking/FreelookTracker.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.FreelookAlwaysOn` (Task 1).
@@ -405,7 +405,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Tracking/FreelookTracker.cs tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs
+git add src/LogiBuddy.Core/Tracking/FreelookTracker.cs tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs
 git commit -m "feat: freelook always-on mode and Recenter"
 ```
 
@@ -414,8 +414,8 @@ git commit -m "feat: freelook always-on mode and Recenter"
 ### Task 5: RadioPipeline.RecenterListener
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs`
+- Modify: `src/LogiBuddy.Core/Pipeline/RadioPipeline.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs`
 
 **Interfaces:**
 - Consumes: `FreelookTracker.Recenter()` (Task 4); `RadioPipeline.ListenerYawDegrees` / `ListenerPitchDegrees` (existing).
@@ -430,7 +430,7 @@ public void RecenterListener_ReturnsOrientationToZero()
     var capture = new FakeCaptureService();
     var output = new FakeOutputService();
     var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
-    var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
+    var input = new LogiBuddy.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
     var tracker = new FreelookTracker(input, profile);
     var effectChain = new RadioEffectChain(48000f);
     var spat = new FakeSpatializer();
@@ -468,7 +468,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Pipeline/RadioPipeline.cs tests/SpotifyGameRadio.Core.Tests/Pipeline/RadioPipelineTests.cs
+git add src/LogiBuddy.Core/Pipeline/RadioPipeline.cs tests/LogiBuddy.Core.Tests/Pipeline/RadioPipelineTests.cs
 git commit -m "feat: add RadioPipeline.RecenterListener"
 ```
 
@@ -477,7 +477,7 @@ git commit -m "feat: add RadioPipeline.RecenterListener"
 ### Task 6: MainViewModel wiring
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
 
 **Interfaces:**
 - Consumes: `RadioProfile.Volume` / `StereoWidth` / `FreelookAlwaysOn` (Task 1); `RadioPipeline.RecenterListener()` (Task 5).
@@ -517,7 +517,7 @@ RecenterCommand = new RelayCommand(_ =>
 
 - [ ] **Step 3: Build**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: succeeds, 0 warnings. (Close the running app first if the exe is locked.)
 
 - [ ] **Step 4: Run the full test suite**
@@ -528,7 +528,7 @@ Expected: all green (no MainViewModel tests, but confirm nothing else regressed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs
 git commit -m "feat: wire volume/width/always-on live + RecenterCommand in MainViewModel"
 ```
 
@@ -537,7 +537,7 @@ git commit -m "feat: wire volume/width/always-on live + RecenterCommand in MainV
 ### Task 7: MainWindow.xaml + height slider
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `MainViewModel.RecenterCommand` (Task 6); `Profile.Volume` / `Profile.StereoWidth` / `Profile.FreelookAlwaysOn` / `Profile.SourceY`.
@@ -597,13 +597,13 @@ Replace the `<controls:SourcePositionCanvas Grid.Row="17" ... />` element with:
 
 - [ ] **Step 6: Build and eyeball**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: succeeds. If the two extra rows push content past the window bottom, change the `Window` `Height="940"` to `Height="1010"`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/MainWindow.xaml
 git commit -m "feat: add volume, width, height, always-on and recenter controls to the window"
 ```
 
@@ -620,7 +620,7 @@ Expected: build 0 warnings; all tests green.
 
 - [ ] **Step 2: Launch**
 
-Close any running instance, then launch `src/SpotifyGameRadio.App/bin/Debug/net8.0-windows/SpotifyGameRadio.App.exe`.
+Close any running instance, then launch `src/LogiBuddy.App/bin/Debug/net8.0-windows/LogiBuddy.App.exe`.
 
 - [ ] **Step 3: Hand off the manual checklist**
 

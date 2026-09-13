@@ -27,9 +27,9 @@
 ### Task 1: `RadioProfile` — `CalibrateHotkey` and `MeasuredYawSweepCounts`
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.Core/Config/RadioProfile.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs`
+- Modify: `src/LogiBuddy.Core/Config/RadioProfile.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs`
 
 **Interfaces:**
 - Consumes: `FreelookHotkey`, the existing `SetField<T>` helper.
@@ -66,7 +66,7 @@ public void AssigningCalibrateHotkey_RaisesPropertyChanged()
 
 - [ ] **Step 2: Run the tests, expect compile failure**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
 Expected: build error — `RadioProfile` has no `CalibrateHotkey` / `MeasuredYawSweepCounts`.
 
 - [ ] **Step 3: Add the fields**
@@ -93,7 +93,7 @@ public float MeasuredYawSweepCounts { get => _measuredYawSweepCounts; set => Set
 
 - [ ] **Step 4: Run the profile tests, expect pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~RadioProfileTests`
 Expected: PASS.
 
 - [ ] **Step 5: Extend the ConfigStore round-trip tests**
@@ -121,13 +121,13 @@ In `Load_ProfileJsonMissingNewerFields_KeepsDefaults`, add:
 
 - [ ] **Step 6: Run the full Core test suite, expect pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --nologo`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --nologo`
 Expected: PASS, count up by the new facts.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Config/RadioProfile.cs tests/SpotifyGameRadio.Core.Tests/Config/RadioProfileTests.cs tests/SpotifyGameRadio.Core.Tests/Config/ConfigStoreTests.cs
+git add src/LogiBuddy.Core/Config/RadioProfile.cs tests/LogiBuddy.Core.Tests/Config/RadioProfileTests.cs tests/LogiBuddy.Core.Tests/Config/ConfigStoreTests.cs
 git commit -m "$(cat <<'EOF'
 feat: add CalibrateHotkey and MeasuredYawSweepCounts to RadioProfile
 
@@ -142,11 +142,11 @@ EOF
 ### Task 2: `CalibrationSession` state machine
 
 **Files:**
-- Create: `src/SpotifyGameRadio.Core/Tracking/CalibrationSession.cs`
-- Test: `tests/SpotifyGameRadio.Core.Tests/Tracking/CalibrationSessionTests.cs`
+- Create: `src/LogiBuddy.Core/Tracking/CalibrationSession.cs`
+- Test: `tests/LogiBuddy.Core.Tests/Tracking/CalibrationSessionTests.cs`
 
 **Interfaces:**
-- Consumes: `IMouseInputSource` (`bool IsHotkeyHeld`, `event Action<int,int>? MouseMoved`). The test double `FakeMouseInputSource` already exists in `tests/SpotifyGameRadio.Core.Tests/Tracking/FreelookTrackerTests.cs` (same namespace `SpotifyGameRadio.Core.Tests.Tracking`): `{ bool IsHotkeyHeld; void RaiseMove(int dx, int dy); }` — reuse it, do not redefine.
+- Consumes: `IMouseInputSource` (`bool IsHotkeyHeld`, `event Action<int,int>? MouseMoved`). The test double `FakeMouseInputSource` already exists in `tests/LogiBuddy.Core.Tests/Tracking/FreelookTrackerTests.cs` (same namespace `LogiBuddy.Core.Tests.Tracking`): `{ bool IsHotkeyHeld; void RaiseMove(int dx, int dy); }` — reuse it, do not redefine.
 - Produces:
   - `enum CalibrationStep { Idle, AwaitLeftLimit, AwaitRightLimit, Completed, Failed, Aborted }`
   - `sealed record CalibrationResult(float MeasuredHalfSweepCounts)`
@@ -163,10 +163,10 @@ EOF
 
 ```csharp
 using System;
-using SpotifyGameRadio.Core.Tracking;
+using LogiBuddy.Core.Tracking;
 using Xunit;
 
-namespace SpotifyGameRadio.Core.Tests.Tracking;
+namespace LogiBuddy.Core.Tests.Tracking;
 
 public class CalibrationSessionTests
 {
@@ -321,7 +321,7 @@ public class CalibrationSessionTests
 
 - [ ] **Step 2: Run tests, expect compile failure**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
 Expected: build error — `CalibrationSession` does not exist.
 
 - [ ] **Step 3: Implement `CalibrationSession.cs`**
@@ -330,7 +330,7 @@ Expected: build error — `CalibrationSession` does not exist.
 using System.Timers;
 using Timer = System.Timers.Timer;
 
-namespace SpotifyGameRadio.Core.Tracking;
+namespace LogiBuddy.Core.Tracking;
 
 public enum CalibrationStep { Idle, AwaitLeftLimit, AwaitRightLimit, Completed, Failed, Aborted }
 
@@ -499,7 +499,7 @@ public sealed class CalibrationSession : IDisposable
 
 - [ ] **Step 4: Run the calibration tests, expect pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --filter FullyQualifiedName~CalibrationSessionTests`
 Expected: PASS (all facts, including `IdleTimeout_Fails`).
 
 Fix the two test-body notes as you go:
@@ -508,13 +508,13 @@ Fix the two test-body notes as you go:
 
 - [ ] **Step 5: Run the full Core suite, expect pass**
 
-Run: `dotnet test tests/SpotifyGameRadio.Core.Tests --nologo`
+Run: `dotnet test tests/LogiBuddy.Core.Tests --nologo`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.Core/Tracking/CalibrationSession.cs tests/SpotifyGameRadio.Core.Tests/Tracking/CalibrationSessionTests.cs
+git add src/LogiBuddy.Core/Tracking/CalibrationSession.cs tests/LogiBuddy.Core.Tests/Tracking/CalibrationSessionTests.cs
 git commit -m "$(cat <<'EOF'
 feat: add CalibrationSession — measures freelook sweep between game view limits
 
@@ -533,11 +533,11 @@ EOF
 ### Task 3: `CalibrationCuePlayer`
 
 **Files:**
-- Create: `src/SpotifyGameRadio.App/Audio/CalibrationCuePlayer.cs`
-- Reference: `src/SpotifyGameRadio.App/Audio/TestTonePlayer.cs` (pattern to mirror)
+- Create: `src/LogiBuddy.App/Audio/CalibrationCuePlayer.cs`
+- Reference: `src/LogiBuddy.App/Audio/TestTonePlayer.cs` (pattern to mirror)
 
 **Interfaces:**
-- Consumes: NAudio `SignalGenerator`, `OffsetSampleProvider`, `FadeInOutSampleProvider`, `WaveOutEvent`; `SpotifyGameRadio.Core.Audio.RenderDeviceEnumerator` only if resolving a device by id is trivial — otherwise default endpoint is acceptable for this pass (note the deviation in the commit).
+- Consumes: NAudio `SignalGenerator`, `OffsetSampleProvider`, `FadeInOutSampleProvider`, `WaveOutEvent`; `LogiBuddy.Core.Audio.RenderDeviceEnumerator` only if resolving a device by id is trivial — otherwise default endpoint is acceptable for this pass (note the deviation in the commit).
 - Produces: `sealed class CalibrationCuePlayer : IDisposable` with `void Captured()`, `void Done()`, `void Failed()`. Each is fire-and-forget, overlap-safe, and never throws out to the caller (swallow device errors — a missing beep must not break calibration).
 
 - [ ] **Step 1: Implement the cue player**
@@ -548,7 +548,7 @@ Mirror `TestTonePlayer`'s structure (own `WaveOutEvent`, fade to avoid clicks, `
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
-namespace SpotifyGameRadio.App.Audio;
+namespace LogiBuddy.App.Audio;
 
 /// Short audio cues for freelook calibration — the game has focus, so the
 /// user needs to hear progress, not see it. Fire-and-forget; a failed cue
@@ -630,13 +630,13 @@ public sealed class CalibrationCuePlayer : IDisposable
 
 - [ ] **Step 2: Build the App project, expect success**
 
-Run: `dotnet build src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj -c Debug --nologo`
+Run: `dotnet build src/LogiBuddy.App/LogiBuddy.App.csproj -c Debug --nologo`
 Expected: `Build succeeded`, 0 errors. Resolve any NAudio API mismatch (`ConcatenatingSampleProvider` is in `NAudio.Wave.SampleProviders`).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/Audio/CalibrationCuePlayer.cs
+git add src/LogiBuddy.App/Audio/CalibrationCuePlayer.cs
 git commit -m "$(cat <<'EOF'
 feat: add CalibrationCuePlayer — captured / done / failed audio cues
 
@@ -651,8 +651,8 @@ EOF
 ### Task 4: Wire calibration into `MainViewModel` and the window
 
 **Files:**
-- Modify: `src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs`
-- Modify: `src/SpotifyGameRadio.App/MainWindow.xaml`
+- Modify: `src/LogiBuddy.App/ViewModels/MainViewModel.cs`
+- Modify: `src/LogiBuddy.App/MainWindow.xaml`
 
 **Interfaces:**
 - Consumes: `CalibrationSession`, `CalibrationResult`, `CalibrationStep` (Core.Tracking); `CalibrationCuePlayer` (App.Audio); `TapHotkeyWatcher`, `Win32KeyStateSource`, `Win32MouseHook` (already used here); `RadioProfile.CalibrateHotkey` / `.MeasuredYawSweepCounts` (Task 1).
@@ -817,10 +817,10 @@ Bump the window height: `Height="950"` → `Height="990"` (line 6).
 
 - [ ] **Step 5: Build and run the app**
 
-Run: `dotnet build SpotifyGameRadio.sln -c Debug --nologo`
+Run: `dotnet build LogiBuddy.sln -c Debug --nologo`
 Expected: `Build succeeded`, 0 errors/warnings.
 
-Run: `dotnet run --project src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj`
+Run: `dotnet run --project src/LogiBuddy.App/LogiBuddy.App.csproj`
 Expected: the window opens, the new "Calibrate hotkey:" row is visible and nothing is clipped above the status line.
 
 - [ ] **Step 6: Manual verification (the testable stage)**
@@ -838,13 +838,13 @@ With a source playing:
 
 - [ ] **Step 7: Run the full solution test suite**
 
-Run: `dotnet test SpotifyGameRadio.sln --nologo`
+Run: `dotnet test LogiBuddy.sln --nologo`
 Expected: PASS (Core suite green; App has no tests).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/SpotifyGameRadio.App/ViewModels/MainViewModel.cs src/SpotifyGameRadio.App/MainWindow.xaml
+git add src/LogiBuddy.App/ViewModels/MainViewModel.cs src/LogiBuddy.App/MainWindow.xaml
 git commit -m "$(cat <<'EOF'
 feat: wire freelook calibration into MainViewModel and the window
 

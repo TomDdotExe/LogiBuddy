@@ -1,0 +1,23 @@
+<UserControl x:Class="LogiBuddy.App.Controls.LabeledSlider"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <Grid Background="Transparent">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="150" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="66" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Grid.Column="0" Text="{Binding Label, ElementName=Root}" Style="{StaticResource RowLabelText}" />
+        <Slider x:Name="ValueSlider" Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Center"
+                Minimum="{Binding Minimum, ElementName=Root}"
+                Maximum="{Binding Maximum, ElementName=Root}"
+                SmallChange="{Binding SmallChange, ElementName=Root}"
+                TickFrequency="{Binding TickFrequency, ElementName=Root}"
+                IsSnapToTickEnabled="{Binding IsSnapToTickEnabled, ElementName=Root}"
+                Value="{Binding Value, ElementName=Root, Mode=TwoWay}" />
+        <Border Grid.Column="2" Style="{StaticResource ReadoutChip}">
+            <TextBlock Text="{Binding DisplayText, ElementName=Root}" Style="{StaticResource ReadoutText}" />
+        </Border>
+    </Grid>
+</UserControl>

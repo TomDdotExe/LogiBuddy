@@ -25,7 +25,7 @@ if (-not $OutputDir) { $OutputDir = Join-Path $repoRoot 'build/dist' }
 $staging    = Join-Path $repoRoot 'build/.staging'
 $appOut     = Join-Path $staging 'app'
 $zipRoot    = Join-Path $staging 'zip'
-$proj       = Join-Path $repoRoot 'src/SpotifyGameRadio.App/SpotifyGameRadio.App.csproj'
+$proj       = Join-Path $repoRoot 'src/LogiBuddy.App/LogiBuddy.App.csproj'
 $fetch      = Join-Path $PSScriptRoot 'fetch-phonon.ps1'
 $licenseIn  = Join-Path $repoRoot 'build/third-party/steam-audio-LICENSE.md'
 $thirdPartyIn = Join-Path $repoRoot 'build/third-party/steam-audio-THIRDPARTY.md'
@@ -61,8 +61,8 @@ if ($dllHash -ne $PhononDllSha256.ToLowerInvariant()) {
 }
 
 Write-Host "== Assembling ZIP tree =="
-New-Item -ItemType Directory -Force -Path (Join-Path $zipRoot 'SpotifyGameRadio') | Out-Null
-Copy-Item -Path (Join-Path $appOut '*') -Destination (Join-Path $zipRoot 'SpotifyGameRadio') -Recurse
+New-Item -ItemType Directory -Force -Path (Join-Path $zipRoot 'LogiBuddy') | Out-Null
+Copy-Item -Path (Join-Path $appOut '*') -Destination (Join-Path $zipRoot 'LogiBuddy') -Recurse
 
 (Get-Content -LiteralPath $readmeTpl -Raw).Replace('{{VERSION}}', $Version) |
     Set-Content -LiteralPath (Join-Path $zipRoot 'README.txt') -Encoding UTF8
@@ -162,7 +162,7 @@ $notice | Set-Content -LiteralPath (Join-Path $zipRoot 'THIRD-PARTY-NOTICES.txt'
 
 Write-Host "== Compressing =="
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$zipPath = Join-Path $OutputDir "SpotifyGameRadio-v$Version-win-x64.zip"
+$zipPath = Join-Path $OutputDir "LogiBuddy-v$Version-win-x64.zip"
 if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Compress-Archive -Path (Join-Path $zipRoot '*') -DestinationPath $zipPath
 

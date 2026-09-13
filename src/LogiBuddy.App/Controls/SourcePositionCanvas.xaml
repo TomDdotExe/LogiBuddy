@@ -1,0 +1,41 @@
+<UserControl x:Class="LogiBuddy.App.Controls.SourcePositionCanvas"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="200" Height="200">
+    <Border BorderBrush="Gray" BorderThickness="1" Background="#111">
+        <!-- Background="Transparent" is required: a Canvas with a null Background is
+             not hit-testable over its empty area, and every child below is
+             IsHitTestVisible="False", so without this neither mouse handler could
+             ever fire. The Border's #111 background still shows through. -->
+        <Canvas x:Name="PlacementCanvas" Background="Transparent"
+                MouseLeftButtonDown="OnCanvasMouseDown" MouseMove="OnCanvasMouseMove">
+            <!-- Listener facing arrow, centred on (100,100). At rest it points up
+                 (forward = up on screen). ListenerYawRotate spins it with the
+                 freelook yaw (WPF positive angle = clockwise = looking right);
+                 ListenerPitchScale foreshortens it as the user looks up/down. -->
+            <Canvas x:Name="PlacementLayer">
+                <Polygon Points="100,84 92,106 108,106" Fill="White" IsHitTestVisible="False">
+                    <Polygon.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform x:Name="ListenerPitchScale" CenterX="100" CenterY="100" ScaleY="1" />
+                            <RotateTransform x:Name="ListenerYawRotate" CenterX="100" CenterY="100" Angle="0" />
+                        </TransformGroup>
+                    </Polygon.RenderTransform>
+                </Polygon>
+                <!-- Fixed pip marking the listener's actual position. -->
+                <Ellipse Width="6" Height="6" Fill="White" Canvas.Left="97" Canvas.Top="97" IsHitTestVisible="False" />
+                <Ellipse x:Name="SourceMarker" Width="14" Height="14" Fill="Orange"
+                         Canvas.Left="93" Canvas.Top="93" IsHitTestVisible="False" />
+            </Canvas>
+            <!-- Outside view: inverse layout — source fixed at centre (collapsed
+                 to the camera's pivot point), listener orbits it on the ring. -->
+            <Canvas x:Name="OrbitLayer" Visibility="Collapsed" IsHitTestVisible="False">
+                <Ellipse Width="140" Height="140" Canvas.Left="30" Canvas.Top="30"
+                         Stroke="#555" StrokeThickness="1" StrokeDashArray="3,3" Fill="Transparent" />
+                <Ellipse Width="14" Height="14" Fill="Orange" Canvas.Left="93" Canvas.Top="93" />
+                <Ellipse x:Name="OrbitListenerMarker" Width="12" Height="12" Fill="White"
+                         Canvas.Left="94" Canvas.Top="164" />
+            </Canvas>
+        </Canvas>
+    </Border>
+</UserControl>

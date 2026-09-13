@@ -1,0 +1,393 @@
+<Window x:Class="LogiBuddy.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LogiBuddy.App.ViewModels"
+        xmlns:controls="clr-namespace:LogiBuddy.App.Controls"
+        Title="LogiBuddy" Width="1040" Height="960" MinWidth="960" MinHeight="700"
+        Background="{StaticResource BgBrush}">
+    <Window.DataContext>
+        <local:MainViewModel />
+    </Window.DataContext>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left column -->
+                <StackPanel Grid.Column="0">
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Profiles" Style="{StaticResource SectionHeaderText}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Name:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <TextBox Width="180" Text="{Binding Profile.Name, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Type a new name and click Save to save-as; type an existing loaded profile's name and Save to rename it." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="Load:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <ComboBox Width="180" ItemsSource="{Binding AvailableProfiles}"
+                                          SelectedItem="{Binding SelectedProfileName}" />
+                                <Button Content="Load" Command="{Binding LoadProfileCommand}" CommandParameter="{Binding SelectedProfileName}" Margin="8,0,0,0" />
+                                <Button Content="Delete" Command="{Binding DeleteProfileCommand}" CommandParameter="{Binding SelectedProfileName}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="Save (bottom bar) writes the current settings under the Name above." Style="{StaticResource MutedText}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Source &amp; Routing" Style="{StaticResource SectionHeaderText}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Source:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <ComboBox Width="180" ItemsSource="{Binding AvailableSources}"
+                                          SelectedValuePath="ProcessName" SelectedValue="{Binding Profile.SourceProcessName}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Content="Refresh" Command="{Binding RefreshSourcesCommand}" Margin="8,0,0,0" />
+                            </StackPanel>
+
+                            <!-- Greys out where per-app routing isn't available (Windows 10, or no
+                                 reachable IAudioPolicyConfig). WPF ANDs parent and child IsEnabled, so
+                                 the combo's own binding still applies. -->
+                            <StackPanel IsEnabled="{Binding IsRoutingSupported}">
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox x:Name="AutoRouteCheck" Content="Auto-route source to a silent device"
+                                              IsChecked="{Binding Profile.AutoRouteSource}" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <ComboBox Width="220"
+                                              ItemsSource="{Binding AvailableRenderDevices}"
+                                              SelectedValuePath="Id" SelectedValue="{Binding Profile.RouteSourceToDeviceId}"
+                                              IsEnabled="{Binding IsChecked, ElementName=AutoRouteCheck}"
+                                              ToolTip="Leave unset to auto-detect a virtual cable at Start.">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding FriendlyName}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Content="Reset routing" Command="{Binding ResetSourceRoutingCommand}" Margin="8,0,0,0" />
+                                </StackPanel>
+                                <TextBlock Text="Restart to apply" Margin="0,6,0,0" Foreground="{StaticResource AttentionBrush}"
+                                           Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Tone Shaping" Style="{StaticResource SectionHeaderText}" />
+
+                            <controls:LabeledSlider Label="High-pass (Hz)" Minimum="50" Maximum="2000"
+                                                     Value="{Binding Profile.HighPassHz}" ValueFormat="{}{0:0} Hz"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Low-pass (Hz)" Minimum="1000" Maximum="8000"
+                                                     Value="{Binding Profile.LowPassHz}" ValueFormat="{}{0:0} Hz"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Distortion" Minimum="0" Maximum="1"
+                                                     Value="{Binding Profile.DistortionDrive}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Comp. thresh (dB)" Minimum="-40" Maximum="0"
+                                                     Value="{Binding Profile.CompressorThresholdDb}" ValueFormat="{}{0:0} dB"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Comp. ratio" Minimum="1" Maximum="20"
+                                                     Value="{Binding Profile.CompressorRatio}" ValueFormat="{}{0:0.0}:1"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Static / noise" Minimum="0" Maximum="0.3"
+                                                     Value="{Binding Profile.NoiseLevel}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Wet / dry mix" Minimum="0" Maximum="1"
+                                                     Value="{Binding Profile.WetDryMix}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Volume" Minimum="0" Maximum="1"
+                                                     Value="{Binding Profile.Volume}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Stereo width" Minimum="0" Maximum="2"
+                                                     Value="{Binding Profile.StereoWidth}" ValueFormat="{}{0:0.00}"
+                                                     ToolTip="0 = mono point source (like a single console speaker), 1 = normal, 2 = wide." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Vehicle &amp; Auto-mute" Style="{StaticResource SectionHeaderText}" />
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Vehicle toggle" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.VehicleToggleHotkey, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Simulates getting in/out of a vehicle." Style="{StaticResource MutedText}" Margin="0,-6,0,10" />
+
+                            <controls:LabeledSlider Label="Exit delay" Minimum="0" Maximum="5"
+                                                     SmallChange="0.1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                     Value="{Binding Profile.VehicleExitDelaySeconds}" ValueFormat="{}{0:0.0} s"
+                                                     Margin="0,0,0,4"
+                                                     ToolTip="Delay before the radio mutes after requesting 'out of vehicle', for games with an exit animation (e.g. Squad). 0 = mute immediately. In hold-to-exit mode below, this is also how long you must hold the key — release early and the exit never happens." />
+
+                            <CheckBox x:Name="HoldToExitCheck" Content="Hold to exit/enter (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
+                                      Margin="0,0,0,10"
+                                      ToolTip="Off (default): a single tap starts the delay counting down regardless of what you do with the key afterward. On: you must hold the key down for the full delay to exit or re-enter — release early and nothing happens, which also makes an accidental tap harmless." />
+
+                            <controls:LabeledSlider Label="Reactivate delay" Minimum="0" Maximum="5"
+                                                     SmallChange="0.1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                     Value="{Binding Profile.VehicleEnterDelaySeconds}" ValueFormat="{}{0:0.0} s"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Delay before the radio un-mutes after requesting 're-entry', for games with an enter-vehicle animation. 0 = un-mute immediately. In hold-to-exit mode, this is also how long you must hold the key to get back in." />
+
+                            <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
+                                      ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Perspective" Style="{StaticResource SectionHeaderText}" />
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Outside view hotkey" Style="{StaticResource RowLabelText}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <controls:HotkeyCaptureControl Hotkey="{Binding Profile.OutsideViewHotkey, Mode=TwoWay}" />
+                                    <Button Content="Toggle View" Command="{Binding OutsideViewToggleCommand}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Starts in outside view on Start. Tap to switch between inside-cockpit and outside third-person sound. Outside, freelook pans freely a full 360° (no cockpit limit) and the source is centred on the camera's pivot point instead of the dashboard position below. Disabled while out of the vehicle (Vehicle toggle above) — there's no inside/outside distinction to make there, and it keeps an accidental press while typing in-game chat from silently flipping it." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                            <controls:LabeledSlider Label="Outside low-pass" Minimum="200" Maximum="4000"
+                                                     Value="{Binding Profile.OutsideLowPassHz}" ValueFormat="{}{0:0} Hz"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Low-pass cutoff used in outside view instead of the Tone Shaping low-pass above — the main 'how muffled' control. Lower = more muffled, as if heard through the vehicle's body/windows from outside." />
+                            <controls:LabeledSlider Label="Outside volume" Minimum="0" Maximum="1"
+                                                     Value="{Binding Profile.OutsideVolume}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Outside stereo width" Minimum="0" Maximum="2"
+                                                     Value="{Binding Profile.OutsideStereoWidth}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Narrower than the normal Stereo width usually sounds more like a distant, indirect source." />
+                            <controls:LabeledSlider Label="Outside source distance" Minimum="0.5" Maximum="10"
+                                                     SmallChange="0.5" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                                     Value="{Binding Profile.OutsideSourceDistance}" ValueFormat="{}{0:0.0} m"
+                                                     ToolTip="How far away the source sits in outside view. Also drives loudness — closer is louder, farther is quieter — since that's the main way an orbiting source actually reads as 'near' or 'far'; too close and panning also barely moves the sound at all, so this is what drives a clear left/right/up/down sweep as you look around." />
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+
+                <!-- Right column -->
+                <StackPanel Grid.Column="2">
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Freelook" Style="{StaticResource SectionHeaderText}" />
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Freelook hotkey" Style="{StaticResource RowLabelText}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <controls:HotkeyCaptureControl Hotkey="{Binding Profile.Hotkey, Mode=TwoWay}" />
+                                    <Button Content="Recenter" Command="{Binding RecenterCommand}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <CheckBox Content="Freelook always on" IsChecked="{Binding Profile.FreelookAlwaysOn}"
+                                      Margin="0,-4,0,10"
+                                      ToolTip="For games whose free-look is always active: track the mouse continuously with no key held, and don't spring back to centre." />
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Recenter hotkey" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.RecenterHotkey, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Fires Recenter without alt-tabbing." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+
+                            <Expander Header="Advanced" Margin="0,0,0,10">
+                                <StackPanel Margin="0,4,0,0">
+                                    <TextBlock Text="Calibration sets these automatically — only touch them if you need to override it."
+                                               Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+                                    <controls:LabeledSlider Label="Mouse sensitivity" Minimum="0.01" Maximum="1.0"
+                                                             Value="{Binding Profile.MouseSensitivity}" ValueFormat="{}{0:0.00}"
+                                                             Margin="0,0,0,10"
+                                                             ToolTip="Recalculated automatically from Max yaw whenever you calibrate, or whenever Max yaw changes afterwards. Set manually only to override that." />
+                                    <controls:LabeledSlider Label="Max yaw" Minimum="0" Maximum="180"
+                                                             Value="{Binding Profile.MaxYawDegrees}" ValueFormat="{}{0:0}°"
+                                                             Margin="0,0,0,10"
+                                                             ToolTip="The reference angle calibration uses — set this to roughly match your game's actual turn limit before calibrating. Also the live clamp on how far freelook can pan." />
+                                    <controls:LabeledSlider Label="Outside pitch sensitivity" Minimum="0.01" Maximum="1.0"
+                                                             Value="{Binding Profile.PitchSensitivity}" ValueFormat="{}{0:0.00}"
+                                                             Margin="0,0,0,4"
+                                                             ToolTip="Degrees per mouse count for outside-view pitch. Manual only, not set by calibration — judging 'straight up'/'straight down' needs the game's own camera to confirm it, and many games clamp well short of that, so there's no reliable reference to calibrate against. Unused inside the cockpit, where pitch stays disabled." />
+                                    <TextBlock Text="Inside: pitch is unused, vertical panning stays disabled there. Outside: pitch is clamped to a fixed ±90° (straight up to straight down)." Style="{StaticResource MutedText}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Expander>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Calibrate hotkey" Style="{StaticResource RowLabelText}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <controls:HotkeyCaptureControl Hotkey="{Binding Profile.CalibrateHotkey, Mode=TwoWay}" />
+                                    <Button Content="Calibrate freelook" Command="{Binding CalibrateFreelookCommand}" Margin="8,0,0,0"
+                                            ToolTip="While running: calibrates whichever view is currently active — yaw only, pitch is a manual slider (see Advanced). Inside: face forward, turn right until the view stops, then tap the calibrate hotkey — sets mouse sensitivity using the Max yaw slider above as the reference angle, so set that to roughly match your game's turn limit first. Outside: switch to outside view first, then spin all the way around and tap — a known 360°, no game-specific reference needed. Click again to cancel." />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Run while playing; needs a freelook key too." Style="{StaticResource MutedText}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Spatial Position" Style="{StaticResource SectionHeaderText}" />
+                            <TextBlock Text="Outside view: the listener orbits a fixed, centred source instead." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Visibility="{Binding IsOutsideView, Converter={StaticResource BoolToVis}}" />
+                            <StackPanel Orientation="Horizontal">
+                                <controls:SourcePositionCanvas
+                                    SourceX="{Binding Profile.SourceX}"
+                                    SourceZ="{Binding Profile.SourceZ}"
+                                    ListenerYaw="{Binding ListenerYaw}"
+                                    ListenerPitch="{Binding ListenerPitch}"
+                                    IsOutsideView="{Binding IsOutsideView}" />
+                                <StackPanel Margin="16,0,0,0" HorizontalAlignment="Center"
+                                            Visibility="{Binding IsOutsideView, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="Pitch" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                    <Border Style="{StaticResource ReadoutChip}" HorizontalAlignment="Center"
+                                            ToolTip="Live outside-view look-up/down angle. Driven by panning, not settable here.">
+                                        <TextBlock Text="{Binding ListenerPitch, StringFormat={}{0:0}°}" Style="{StaticResource ReadoutText}" />
+                                    </Border>
+                                </StackPanel>
+                                <StackPanel Margin="16,0,0,0" HorizontalAlignment="Center">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsOutsideView}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="Height" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                    <Slider Orientation="Vertical" Style="{StaticResource VerticalSliderStyle}"
+                                            Minimum="-2" Maximum="2" Height="180"
+                                            Value="{Binding Profile.SourceY}"
+                                            ToolTip="Raises or lowers the source. Audible on the HRTF path; the stereo-pan fallback has no elevation cue." />
+                                    <Border Style="{StaticResource ReadoutChip}" Margin="0,6,0,0" HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding Profile.SourceY, StringFormat={}{0:0.00} m}" Style="{StaticResource ReadoutText}" />
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Voice Chat" Style="{StaticResource SectionHeaderText}" />
+
+                            <!-- Greys out until the voice model is downloaded (below) — there's
+                                 nothing to transcribe with yet. WPF ANDs parent and child
+                                 IsEnabled, so each control's own binding still applies once ready. -->
+                            <StackPanel IsEnabled="{Binding VoiceModelReady}"
+                                        ToolTip="Download the voice model below to enable voice chat."
+                                        ToolTipService.ShowOnDisabled="True">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="130" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Record hotkey" Style="{StaticResource RowLabelText}" />
+                                    <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                        Hotkey="{Binding Profile.VoiceRecordHotkey, Mode=TwoWay}" />
+                                </Grid>
+                                <TextBlock Text="Hold to record, release to transcribe — copied to the clipboard automatically. Hold again to redo (replaces it)." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <TextBlock Text="Microphone:" Width="90" Style="{StaticResource RowLabelText}" />
+                                    <ComboBox Width="220" ItemsSource="{Binding AvailableCaptureDevices}"
+                                              SelectedValuePath="Id" SelectedValue="{Binding Profile.VoiceMicrophoneDeviceId}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding FriendlyName}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </StackPanel>
+
+                                <TextBlock Text="Custom vocabulary" Style="{StaticResource RowLabelText}" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding Profile.VoiceCustomVocabulary, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" Height="70" Margin="0,0,0,10"
+                                         ToolTip="Comma or newline separated. Biases transcription toward these terms — add callsigns and jargon specific to your unit/game." />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Visibility="{Binding VoiceModelNotReady, Converter={StaticResource BoolToVis}}">
+                                <Button Content="Download voice model" Command="{Binding DownloadVoiceModelCommand}" />
+                                <TextBlock Text="{Binding VoiceModelDownloadProgress, StringFormat=' {0:P0}'}" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" Visibility="{Binding VoiceModelDownloading, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                            <TextBlock Text="Voice model ready." Style="{StaticResource MutedText}"
+                                       Visibility="{Binding VoiceModelReady, Converter={StaticResource BoolToVis}}" />
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,1,0,0" Padding="0,14,0,0">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Start" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}" Width="90" Margin="0,0,8,0" />
+                    <Button Content="Stop" Command="{Binding StopCommand}" Width="90" Margin="0,0,8,0" />
+                    <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="110" Margin="0,0,8,0" />
+                    <Button Content="Check for Updates" Command="{Binding CheckForUpdatesCommand}" Width="140" />
+                    <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource AttentionBrush}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}"
+                               Text="Restart (Stop then Start) to apply source / routing / mute changes." />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding StatusMessage}" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="500" />
+                    <TextBlock Text="{Binding BufferUnderrunCount, StringFormat=' (underruns: {0})'}" Margin="8,0,0,0"
+                               Style="{StaticResource MutedText}" />
+                    <TextBlock Text="{Binding UpdateAvailableMessage}" Margin="8,0,0,0"
+                               Foreground="{StaticResource AttentionBrush}"
+                               Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
