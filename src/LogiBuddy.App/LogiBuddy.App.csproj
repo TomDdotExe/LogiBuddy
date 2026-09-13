@@ -21,7 +21,17 @@
          LogiBuddy.App.exe). Nothing derives paths from the
          assembly name. -->
     <AssemblyName>LogiBuddy</AssemblyName>
+    <!-- Source of truth lives in the root Images/ folder (design assets),
+         not duplicated into the project. -->
+    <ApplicationIcon>..\..\Images\logibuddy-light.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embeds the same icon as a WPF resource (Resources/AppIcon.ico) so
+         Window.Icon can reference it via pack URI, without duplicating the
+         file — Link keeps the physical file in the root Images/ folder. -->
+    <Resource Include="..\..\Images\logibuddy-light.ico" Link="Resources\AppIcon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Condition guards against MSB3030 (missing-file copy error) until phonon.dll

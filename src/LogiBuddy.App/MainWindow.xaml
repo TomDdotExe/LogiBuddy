@@ -4,6 +4,7 @@
         xmlns:local="clr-namespace:LogiBuddy.App.ViewModels"
         xmlns:controls="clr-namespace:LogiBuddy.App.Controls"
         Title="LogiBuddy" Width="1040" Height="960" MinWidth="960" MinHeight="700"
+        Icon="Resources/AppIcon.ico"
         Background="{StaticResource BgBrush}">
     <Window.DataContext>
         <local:MainViewModel />

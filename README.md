@@ -1,3 +1,5 @@
+![LogiBuddy](Images/Header.png)
+
 # LogiBuddy
 
 LogiBuddy turns any audio source on your PC — Spotify, a browser tab, Discord,

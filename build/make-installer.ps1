@@ -31,6 +31,8 @@ $licenseIn    = Join-Path $repoRoot 'build/third-party/steam-audio-LICENSE.md'
 $thirdPartyIn = Join-Path $repoRoot 'build/third-party/steam-audio-THIRDPARTY.md'
 $readmeTpl    = Join-Path $PSScriptRoot 'templates/README.txt'
 $issFile      = Join-Path $PSScriptRoot 'installer.iss'
+$logoIn       = Join-Path $repoRoot 'Images/Logo.png'
+$wizardSmallBmp = Join-Path $staging 'wizard-small.bmp'
 
 # Keep in sync with $PhononDllSha256 in build/fetch-phonon.ps1 and package.ps1.
 $PhononDllSha256 = 'ca3dbc01dbc24492717011e80f6a51404ca143ae344ca660971d2c983f1e058d'
@@ -170,10 +172,30 @@ SOFTWARE.
 "@
 $notice | Set-Content -LiteralPath (Join-Path $appOut 'THIRD-PARTY-NOTICES.txt') -Encoding UTF8
 
+Write-Host "== Rendering wizard small image from Images/Logo.png =="
+if (-not (Test-Path -LiteralPath $logoIn)) {
+    throw "Missing $logoIn."
+}
+Add-Type -AssemblyName System.Drawing
+# Inno Setup's WizardSmallImageFile requires a .bmp (no PNG/JPG support), and
+# the recommended size for WizardStyle=modern is 100x100 — Logo.png is
+# already square, so a straight high-quality resize needs no letterboxing.
+$sourceImage = [System.Drawing.Image]::FromFile($logoIn)
+try {
+    $target = New-Object System.Drawing.Bitmap 100, 100
+    $graphics = [System.Drawing.Graphics]::FromImage($target)
+    try {
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.DrawImage($sourceImage, 0, 0, 100, 100)
+    } finally { $graphics.Dispose() }
+    $target.Save($wizardSmallBmp, [System.Drawing.Imaging.ImageFormat]::Bmp)
+    $target.Dispose()
+} finally { $sourceImage.Dispose() }
+
 Write-Host "== Compiling installer (Inno Setup) =="
 $iscc = Find-Iscc
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-& $iscc "/DAppVersion=$Version" "/DSourceDir=$appOut" $issFile
+& $iscc "/DAppVersion=$Version" "/DSourceDir=$appOut" "/DWizardSmallImage=$wizardSmallBmp" $issFile
 if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed (exit $LASTEXITCODE)." }
 
 $setupPath = Join-Path $OutputDir "LogiBuddy-v$Version-win-x64-setup.exe"
