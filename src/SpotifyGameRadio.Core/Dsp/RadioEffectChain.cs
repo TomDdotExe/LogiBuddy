@@ -78,11 +78,17 @@ public class RadioEffectChain
         for (int i = 0; i < count; i++)
         {
             float dry = buffer[i];
-            float wet = _highPass.Process(dry);
+            // Noise goes in before the filter/distortion/compressor stage
+            // rather than added on top of it afterward: real radio static
+            // shares the receiver's own band-limiting and companding, so it
+            // takes on the same muffled, narrow-band character as the voice
+            // instead of reading as a separate, full-band hiss layered over
+            // an already-filtered signal.
+            float wet = dry + _noise.NextSample();
+            wet = _highPass.Process(wet);
             wet = _lowPass.Process(wet);
             wet = _distortion.Process(wet);
             wet = _compressor.Process(wet);
-            wet += _noise.NextSample();
 
             buffer[i] = dry * (1f - WetDryMix) + wet * WetDryMix;
         }

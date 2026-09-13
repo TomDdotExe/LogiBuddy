@@ -2,7 +2,6 @@ using System.IO;
 using System.Speech.Synthesis;
 using System.Threading;
 using System.Threading.Tasks;
-using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
 namespace SpotifyGameRadio.App.Audio;
@@ -47,7 +46,7 @@ public sealed class CalibrationAnnouncer : IDisposable
             wav.Position = 0;
 
             using var reader = new WaveFileReader(wav);
-            using var player = CreatePlayer();
+            using var player = DeviceOutputPlayer.Create(_deviceIdProvider);
             using var done = new ManualResetEventSlim(false);
             player.PlaybackStopped += (_, _) => done.Set();
             player.Init(reader);
@@ -62,29 +61,6 @@ public sealed class CalibrationAnnouncer : IDisposable
         {
             _gate.Release();
         }
-    }
-
-    private IWavePlayer CreatePlayer()
-    {
-        string? id = _deviceIdProvider();
-        if (!string.IsNullOrEmpty(id))
-        {
-            try
-            {
-                using var mm = new MMDeviceEnumerator();
-                foreach (var device in mm.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active))
-                {
-                    if (device.ID == id)
-                        return new WasapiOut(device, AudioClientShareMode.Shared, false, 120);
-                    device.Dispose();
-                }
-            }
-            catch
-            {
-                // Fall through to the default endpoint.
-            }
-        }
-        return new WaveOutEvent();
     }
 
     public void Dispose()

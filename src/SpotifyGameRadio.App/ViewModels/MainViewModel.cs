@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
@@ -10,6 +11,7 @@ using SpotifyGameRadio.Core.Pipeline;
 using SpotifyGameRadio.Core.Spatial;
 using SpotifyGameRadio.Core.Speech;
 using SpotifyGameRadio.Core.Tracking;
+using SpotifyGameRadio.Core.Updates;
 
 namespace SpotifyGameRadio.App.ViewModels;
 
@@ -27,9 +29,23 @@ public class MainViewModel : INotifyPropertyChanged
     private TapHotkeyWatcher? _recenterHotkeyWatcher;
     private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
     private bool _isInVehicle = true;
-    private bool _vehicleExitConfirmed;
-    private DateTime _vehicleHotkeyPressedAt;
-    private System.Windows.Threading.DispatcherTimer? _vehicleExitTimer;
+    private TapHotkeyWatcher? _outsideViewHotkeyWatcher;
+    private bool _isOutsideView;
+    /// Bound by SourcePositionCanvas to swap its visual between the inside
+    /// drag-to-place layout and the outside orbit-ring layout.
+    public bool IsOutsideView
+    {
+        get => _isOutsideView;
+        private set { _isOutsideView = value; OnPropertyChanged(); }
+    }
+    private System.Windows.Threading.DispatcherTimer? _vehicleTransitionTimer;
+    // The direction currently being requested — distinct from _isInVehicle,
+    // which only flips once a transition actually completes. Toggling twice
+    // in quick succession (tap mode) while the first transition is still
+    // pending needs to compare against "what did I just ask for", not "what
+    // was last confirmed", or the second tap computes the same target as the
+    // first instead of reversing it.
+    private bool _vehicleWantInVehicle = true;
     private CalibrationSession? _calibrationSession;
     private TapHotkeyWatcher? _calibrateHotkeyWatcher;
     private readonly CalibrationAnnouncer _announcer;
@@ -37,9 +53,20 @@ public class MainViewModel : INotifyPropertyChanged
     private VoiceChatSession? _voiceSession;
     private LazyWhisperSpeechToText? _speechToText;
     private TapHotkeyWatcher? _voiceRecordWatcher;
-    private TapHotkeyWatcher? _voiceConfirmWatcher;
-    private TapHotkeyWatcher? _voiceDiscardWatcher;
     private VoicePreviewOverlay? _voiceOverlay;
+    private System.Windows.Threading.DispatcherTimer? _voiceOverlayHideTimer;
+    private readonly VoiceCuePlayer _voiceCue;
+
+    // Name Profile was last loaded from or saved as, or null if it has never
+    // been persisted. Lets SaveProfile() detect a rename (Profile.Name typed
+    // to something new) and delete the stale file instead of leaving a
+    // duplicate behind.
+    private string? _loadedProfileName;
+
+    private const string UpdateRepoOwner = "TomDdotExe";
+    private const string UpdateRepoName = "LogiBuddy";
+    private readonly IUpdateChecker _updateChecker = new GitHubUpdateChecker(UpdateRepoOwner, UpdateRepoName);
+    private UpdateInfo? _pendingUpdate;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
     {
@@ -49,9 +76,11 @@ public class MainViewModel : INotifyPropertyChanged
         nameof(RadioProfile.WetDryMix),
         nameof(RadioProfile.SourceX), nameof(RadioProfile.SourceY), nameof(RadioProfile.SourceZ),
         nameof(RadioProfile.MouseSensitivity), nameof(RadioProfile.MaxYawDegrees),
-        nameof(RadioProfile.MaxPitchDegrees), nameof(RadioProfile.SpringBackRatePerSecond),
+        nameof(RadioProfile.SpringBackRatePerSecond),
         nameof(RadioProfile.Volume), nameof(RadioProfile.StereoWidth),
         nameof(RadioProfile.FreelookAlwaysOn),
+        nameof(RadioProfile.OutsideLowPassHz), nameof(RadioProfile.OutsideVolume),
+        nameof(RadioProfile.OutsideStereoWidth), nameof(RadioProfile.OutsideSourceDistance),
     };
 
     // Hotkey and OutputDeviceId are applied live (see OnProfilePropertyChanged);
@@ -69,6 +98,16 @@ public class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<AudioSourceInfo> AvailableSources { get; private set; } = Array.Empty<AudioSourceInfo>();
     public IReadOnlyList<RenderDeviceInfo> AvailableRenderDevices { get; private set; } = Array.Empty<RenderDeviceInfo>();
     public IReadOnlyList<string> AvailableProfiles => _configStore.ListProfiles();
+
+    private string? _selectedProfileName;
+    /// Backs the profile dropdown; Load/Delete act on whichever name is
+    /// selected here, independent of Profile.Name (the text box for the
+    /// currently-loaded profile's own name).
+    public string? SelectedProfileName
+    {
+        get => _selectedProfileName;
+        set { _selectedProfileName = value; OnPropertyChanged(); }
+    }
 
     private string _statusMessage = "Idle";
     public string StatusMessage
@@ -90,6 +129,18 @@ public class MainViewModel : INotifyPropertyChanged
         get => _restartRequired;
         set { _restartRequired = value; OnPropertyChanged(); }
     }
+
+    // Set by the silent startup update check when a newer release exists;
+    // cleared otherwise. Bound to a small inline note next to the status
+    // text — never a popup, so a startup check never interrupts.
+    private string _updateAvailableMessage = "";
+    public string UpdateAvailableMessage
+    {
+        get => _updateAvailableMessage;
+        set { _updateAvailableMessage = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasUpdateAvailable)); }
+    }
+
+    public bool HasUpdateAvailable => !string.IsNullOrEmpty(UpdateAvailableMessage);
 
     // Live freelook orientation, polled from the pipeline by _uiTimer while
     // running and bound by SourcePositionCanvas to rotate the listener marker.
@@ -141,9 +192,12 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand StopCommand { get; }
     public ICommand SaveProfileCommand { get; }
     public ICommand LoadProfileCommand { get; }
+    public ICommand DeleteProfileCommand { get; }
     public ICommand ResetSourceRoutingCommand { get; }
     public ICommand RecenterCommand { get; }
     public ICommand CalibrateFreelookCommand { get; }
+    public ICommand CheckForUpdatesCommand { get; }
+    public ICommand OutsideViewToggleCommand { get; }
 
     public MainViewModel()
     {
@@ -155,8 +209,13 @@ public class MainViewModel : INotifyPropertyChanged
         // after UI interactions such as the Start/Stop clicks themselves.
         StartCommand = new RelayCommand(_ => Start(), _ => _pipeline is null);
         StopCommand = new RelayCommand(_ => Stop());
-        SaveProfileCommand = new RelayCommand(_ => _configStore.Save(Profile));
-        LoadProfileCommand = new RelayCommand(name => LoadProfile((string)name!));
+        SaveProfileCommand = new RelayCommand(_ => SaveProfile());
+        LoadProfileCommand = new RelayCommand(
+            name => LoadProfile((string)name!),
+            name => !string.IsNullOrEmpty(name as string));
+        DeleteProfileCommand = new RelayCommand(
+            name => DeleteProfile((string)name!),
+            name => !string.IsNullOrEmpty(name as string));
         ResetSourceRoutingCommand = new RelayCommand(_ => ResetSourceRouting());
         RecenterCommand = new RelayCommand(_ => Recenter());
         CalibrateFreelookCommand = new RelayCommand(
@@ -167,7 +226,10 @@ public class MainViewModel : INotifyPropertyChanged
                  && Profile.CalibrateHotkey.VirtualKeyCode != 0
                  && Profile.CalibrateHotkey.VirtualKeyCode != Profile.Hotkey.VirtualKeyCode);
         DownloadVoiceModelCommand = new RelayCommand(_ => _ = DownloadVoiceModelAsync(), _ => !VoiceModelDownloading);
+        CheckForUpdatesCommand = new RelayCommand(_ => _ = CheckForUpdatesAsync(manual: true));
+        OutsideViewToggleCommand = new RelayCommand(_ => OnOutsideViewTogglePressed(), _ => _pipeline is not null);
         _announcer = new CalibrationAnnouncer(() => Profile.OutputDeviceId);
+        _voiceCue = new VoiceCuePlayer(() => Profile.OutputDeviceId);
 
         RefreshSources();
         Profile.PropertyChanged += OnProfilePropertyChanged;
@@ -180,9 +242,21 @@ public class MainViewModel : INotifyPropertyChanged
         _voiceSession = new VoiceChatSession(
             new SpotifyGameRadio.Core.Audio.MicrophoneCapture(),
             _speechToText,
-            () => VocabularyPromptBuilder.Build(Profile.VoiceCustomVocabulary),
+            () => VocabularyPromptBuilder.ParseTerms(Profile.VoiceCustomVocabulary),
             () => Profile.VoiceMicrophoneDeviceId);
         _voiceSession.StateChanged += OnVoiceStateChanged;
+        _voiceSession.PreviewReady += transcript =>
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    Clipboard.SetText(transcript);
+                    StatusMessage = "Copied to clipboard — paste it in, or hold Record to redo.";
+                });
+            }
+            catch (Exception) { /* app is shutting down; nothing to copy */ }
+        };
         _voiceSession.Failed += reason =>
         {
             try
@@ -210,26 +284,6 @@ public class MainViewModel : INotifyPropertyChanged
             catch (Exception) { /* app is shutting down; nothing to record */ }
         };
 
-        _voiceConfirmWatcher = new TapHotkeyWatcher(Profile.VoiceConfirmHotkey, new Win32KeyStateSource());
-        _voiceConfirmWatcher.Pressed += () =>
-        {
-            try
-            {
-                Application.Current?.Dispatcher.Invoke(OnVoiceConfirmPressed);
-            }
-            catch (Exception) { /* app is shutting down; nothing to confirm */ }
-        };
-
-        _voiceDiscardWatcher = new TapHotkeyWatcher(Profile.VoiceDiscardHotkey, new Win32KeyStateSource());
-        _voiceDiscardWatcher.Pressed += () =>
-        {
-            try
-            {
-                Application.Current?.Dispatcher.Invoke(() => _voiceSession?.Discard());
-            }
-            catch (Exception) { /* app is shutting down; nothing to discard */ }
-        };
-
         // Crash recovery runs during construction, i.e. while the window is
         // being built — nothing in here may throw, or the app fails to launch.
         try
@@ -244,6 +298,10 @@ public class MainViewModel : INotifyPropertyChanged
         {
             StatusMessage = $"Couldn't restore previous source routing: {ex.Message}";
         }
+
+        // Fire-and-forget: never blocks startup, never surfaces a failure
+        // (offline, rate-limited, no releases yet all end up silent here).
+        _ = CheckForUpdatesAsync(manual: false);
     }
 
     private void OnProfilePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -294,17 +352,13 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
         }
+        else if (e.PropertyName == nameof(RadioProfile.OutsideViewHotkey))
+        {
+            _outsideViewHotkeyWatcher?.SetHotkey(Profile.OutsideViewHotkey);
+        }
         else if (e.PropertyName == nameof(RadioProfile.VoiceRecordHotkey))
         {
             _voiceRecordWatcher?.SetHotkey(Profile.VoiceRecordHotkey);
-        }
-        else if (e.PropertyName == nameof(RadioProfile.VoiceConfirmHotkey))
-        {
-            _voiceConfirmWatcher?.SetHotkey(Profile.VoiceConfirmHotkey);
-        }
-        else if (e.PropertyName == nameof(RadioProfile.VoiceDiscardHotkey))
-        {
-            _voiceDiscardWatcher?.SetHotkey(Profile.VoiceDiscardHotkey);
         }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
@@ -363,6 +417,28 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    /// Saves Profile under its current Name. If it was previously loaded or
+    /// saved under a different name (the name box was edited), this is a
+    /// rename: the stale file is deleted so the profile list doesn't end up
+    /// with a leftover duplicate under the old name.
+    private void SaveProfile()
+    {
+        var previousName = _loadedProfileName;
+        _configStore.Save(Profile);
+        if (previousName is not null && previousName != Profile.Name)
+            _configStore.Delete(previousName);
+        _loadedProfileName = Profile.Name;
+        OnPropertyChanged(nameof(AvailableProfiles));
+    }
+
+    private void DeleteProfile(string name)
+    {
+        _configStore.Delete(name);
+        if (_loadedProfileName == name) _loadedProfileName = null;
+        if (SelectedProfileName == name) SelectedProfileName = null;
+        OnPropertyChanged(nameof(AvailableProfiles));
+    }
+
     private void LoadProfile(string name)
     {
         if (_calibrationSession is not null)
@@ -373,6 +449,7 @@ public class MainViewModel : INotifyPropertyChanged
         Profile.PropertyChanged -= OnProfilePropertyChanged;
         Profile = _configStore.Load(name);
         Profile.PropertyChanged += OnProfilePropertyChanged;
+        _loadedProfileName = name;
         OnPropertyChanged(nameof(Profile));
 
         if (_pipeline is not null)
@@ -385,18 +462,82 @@ public class MainViewModel : INotifyPropertyChanged
                 _recenterHotkeyWatcher?.SetHotkey(Profile.RecenterHotkey);
                 _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
                 _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
+                _outsideViewHotkeyWatcher?.SetHotkey(Profile.OutsideViewHotkey);
             }
             catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
             // Source process and routing still need a manual Stop/Start.
             RestartRequired = true;
         }
 
-        // Voice hotkey watchers are constructor-scoped (they work without the
-        // pipeline running), so they're re-wired unconditionally here rather
+        // The voice hotkey watcher is constructor-scoped (it works without
+        // the pipeline running), so it's re-wired unconditionally here rather
         // than inside the _pipeline-is-not-null block above.
         _voiceRecordWatcher?.SetHotkey(Profile.VoiceRecordHotkey);
-        _voiceConfirmWatcher?.SetHotkey(Profile.VoiceConfirmHotkey);
-        _voiceDiscardWatcher?.SetHotkey(Profile.VoiceDiscardHotkey);
+    }
+
+    /// Checks GitHub for a newer release. On startup (manual: false) any
+    /// failure is swallowed — offline, rate-limited, or no releases yet all
+    /// just mean no note appears. From the "Check for Updates" button
+    /// (manual: true), a failure is reported and a confirmed up-to-date
+    /// result gets an explicit acknowledgement instead of silence.
+    private async Task CheckForUpdatesAsync(bool manual)
+    {
+        var currentVersion = GetCurrentVersion();
+        try
+        {
+            var info = await _updateChecker.CheckForUpdateAsync(currentVersion);
+            _pendingUpdate = info;
+            if (info is not null)
+            {
+                UpdateAvailableMessage = $"Update available: v{info.Version}";
+                if (manual) ShowUpdateAvailableDialog(info);
+            }
+            else
+            {
+                UpdateAvailableMessage = "";
+                if (manual)
+                {
+                    MessageBox.Show($"You're up to date (v{currentVersion}).", "Check for Updates",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (manual)
+            {
+                MessageBox.Show($"Couldn't check for updates: {ex.Message}", "Check for Updates",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    private static void ShowUpdateAvailableDialog(UpdateInfo info)
+    {
+        var notes = string.IsNullOrWhiteSpace(info.ReleaseNotes) ? "(no patch notes provided)" : info.ReleaseNotes;
+        var result = MessageBox.Show(
+            $"Version {info.Version} is available.\n\n{notes}\n\nOpen the release page?",
+            "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Information);
+        if (result != MessageBoxResult.Yes || string.IsNullOrEmpty(info.HtmlUrl)) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(info.HtmlUrl) { UseShellExecute = true });
+        }
+        catch { /* best effort; nothing sensible to do if the browser won't launch */ }
+    }
+
+    /// Reads the version .csproj/package.ps1 stamp onto the assembly
+    /// (AssemblyInformationalVersion, set via -p:Version at publish) so the
+    /// update check compares against what was actually shipped.
+    private static string GetCurrentVersion()
+    {
+        var raw = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
+        // The SDK appends "+<git-commit-hash>" (SourceRevisionId) to
+        // InformationalVersion by default — meaningless noise for a
+        // user-facing version string or for comparing against a release tag.
+        var plusIndex = raw.IndexOf('+');
+        return plusIndex >= 0 ? raw[..plusIndex] : raw;
     }
 
     /// Resolves the render-device id to route the source to: the profile's
@@ -561,59 +702,108 @@ public class MainViewModel : INotifyPropertyChanged
     }
 
     /// Fires on the vehicle-toggle hotkey's key-down edge. In tap-to-toggle
-    /// mode (default) this flips in/out of vehicle. In hold-to-exit mode,
-    /// pressing while in the vehicle starts exiting; pressing while already
-    /// out (mid-exit or confirmed-out) just marks the start of what
-    /// OnVehicleToggleReleased will treat as the re-entry gesture.
+    /// mode (default) the tap immediately requests the opposite of whatever
+    /// direction is currently requested — see _vehicleWantInVehicle — and
+    /// RequestVehicleState starts counting down the matching delay right
+    /// away; nothing here waits on a key-up. In hold-to-exit mode, a press
+    /// requests the opposite of the last CONFIRMED state and, since holding
+    /// is required, that request only completes if the hold survives the
+    /// full delay — see OnVehicleToggleReleased for the cancel path.
     private void OnVehicleTogglePressed()
     {
-        if (Profile.HoldToExitVehicle)
-        {
-            _vehicleHotkeyPressedAt = DateTime.UtcNow;
-            if (_isInVehicle)
-            {
-                _isInVehicle = false;
-                _vehicleExitConfirmed = false;
-                EnterOutOfVehicle();
-            }
-            return;
-        }
-
-        _isInVehicle = !_isInVehicle;
-        if (_isInVehicle) EnterInVehicle(); else EnterOutOfVehicle();
+        RequestVehicleState(Profile.HoldToExitVehicle ? !_isInVehicle : !_vehicleWantInVehicle);
     }
 
     /// Fires on the vehicle-toggle hotkey's key-up edge. Ignored in
-    /// tap-to-toggle mode. In hold-to-exit mode:
-    /// - Released before an exit is confirmed: if held less than
-    ///   Profile.MinHoldToExitSeconds, treat it as an aborted attempt (the
-    ///   in-game exit likely never registered either) and snap back to "in
-    ///   vehicle". Held at least that long, the exit is confirmed — release
-    ///   no longer cancels it, so the pending mute timer keeps running.
-    /// - Released after an exit is already confirmed: this is the re-entry
-    ///   gesture, always immediate (no hold-length check — entering back in
-    ///   was never the part that raced against the mute timer).
+    /// tap-to-toggle mode — the press already started the (release-proof)
+    /// delay timer. In hold-to-exit mode, releasing before that timer has
+    /// fired cancels the attempt outright: nothing was muted/unmuted yet, so
+    /// there's nothing to roll back, just a status message telling the user
+    /// they let go too early. A release after the timer already fired is a
+    /// no-op (RequestVehicleState(_isInVehicle) below just re-confirms the
+    /// state that's already true).
     private void OnVehicleToggleReleased()
     {
-        if (!Profile.HoldToExitVehicle || _isInVehicle) return;
+        if (!Profile.HoldToExitVehicle) return;
 
-        if (!_vehicleExitConfirmed)
+        bool cancelling = _vehicleTransitionTimer is not null;
+        RequestVehicleState(_isInVehicle);
+        if (cancelling)
+            StatusMessage = _isInVehicle
+                ? "Exit cancelled — hold the full duration to exit."
+                : "Re-entry cancelled — hold the full duration to get back in.";
+    }
+
+    /// Single entry point for both vehicle-toggle modes: requests that the
+    /// source end up muted (wantInVehicle: false) or unmuted (true).
+    /// Requesting whatever _isInVehicle already is cancels any transition
+    /// still counting down (nothing changed yet, so there's nothing to
+    /// finish) and otherwise does nothing. Requesting the opposite
+    /// (re)starts a fresh countdown of Profile.VehicleExitDelaySeconds or
+    /// VehicleEnterDelaySeconds — 0 completes immediately — timed from this
+    /// call, not from any later key-up.
+    private void RequestVehicleState(bool wantInVehicle)
+    {
+        _vehicleWantInVehicle = wantInVehicle;
+        _vehicleTransitionTimer?.Stop();
+        _vehicleTransitionTimer = null;
+
+        if (wantInVehicle == _isInVehicle)
         {
-            var minHold = TimeSpan.FromSeconds(Math.Max(0f, Profile.MinHoldToExitSeconds));
-            if (DateTime.UtcNow - _vehicleHotkeyPressedAt >= minHold)
-            {
-                _vehicleExitConfirmed = true; // exit confirmed; release no longer cancels it
-                return;
-            }
-
-            _isInVehicle = true;
-            EnterInVehicle();
+            StatusMessage = _isInVehicle ? "In vehicle" : "Out of vehicle";
             return;
         }
 
-        _isInVehicle = true;
-        _vehicleExitConfirmed = false;
-        EnterInVehicle();
+        float delaySeconds = ClampDelaySeconds(wantInVehicle ? Profile.VehicleEnterDelaySeconds : Profile.VehicleExitDelaySeconds);
+        if (delaySeconds <= 0f)
+        {
+            CompleteVehicleTransition(wantInVehicle);
+            return;
+        }
+
+        StatusMessage = wantInVehicle
+            ? $"Entering vehicle — reactivating in {delaySeconds:0.#}s"
+            : $"Exiting vehicle — muting in {delaySeconds:0.#}s";
+        var timer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(delaySeconds)
+        };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _vehicleTransitionTimer = null;
+            CompleteVehicleTransition(wantInVehicle);
+        };
+        _vehicleTransitionTimer = timer;
+        timer.Start();
+    }
+
+    private void CompleteVehicleTransition(bool inVehicle)
+    {
+        _isInVehicle = inVehicle;
+        _pipeline?.SetVehicleMuted(!inVehicle);
+        StatusMessage = inVehicle ? "In vehicle" : "Out of vehicle";
+    }
+
+    /// Fires on the outside-view hotkey's tap (and the window button, via the
+    /// same handler). Swaps the pipeline's tone between the profile's normal
+    /// (inside) values and its Outside* values. Ignored while out of the
+    /// vehicle (_isInVehicle false): an outside/inside cockpit distinction
+    /// doesn't mean anything once you're not even at the vehicle, and
+    /// disabling the key there means an accidental press while typing
+    /// in-game chat (the same key easily doubling as a chat character)
+    /// can't silently flip it.
+    private void OnOutsideViewTogglePressed()
+    {
+        if (!_isInVehicle)
+        {
+            StatusMessage = "Outside view is only available while in the vehicle.";
+            return;
+        }
+
+        IsOutsideView = !IsOutsideView;
+        _pipeline?.SetOutsideView(_isOutsideView);
+        StatusMessage = _isOutsideView ? "Outside view" : "Inside cockpit";
     }
 
     private void OnVoiceRecordPressed()
@@ -626,29 +816,33 @@ public class MainViewModel : INotifyPropertyChanged
         _voiceSession?.BeginRecording();
     }
 
-    private void OnVoiceConfirmPressed()
-    {
-        if (_voiceSession is null || _voiceSession.State != VoiceChatState.PreviewReady) return;
-        // Transcript is guaranteed non-null whenever State == PreviewReady
-        // (VoiceChatSession sets it right before that transition) — the
-        // compiler can't see that invariant across two separate properties,
-        // hence the null-forgiving operator rather than a redundant null check.
-        Clipboard.SetText(_voiceSession.Transcript!);
-        StatusMessage = "Copied to clipboard — paste it in.";
-        _voiceSession.Discard();
-    }
-
+    /// Drives the on-screen preview overlay. Idle hides it immediately.
+    /// Recording/Transcribing show a status line with no hint (nothing to
+    /// action yet). PreviewReady shows the transcript — already copied to
+    /// the clipboard by the PreviewReady handler wired in the constructor —
+    /// and starts a timer to auto-hide the overlay after a few seconds so it
+    /// doesn't linger over gameplay. Any state change (including a
+    /// re-record starting) cancels a pending hide. The hint additionally
+    /// flags a low-confidence transcript (Whisper itself was unsure) so the
+    /// user knows to double-check before relying on what got copied, rather
+    /// than trusting a wrong-looking sentence with no warning at all.
     private void OnVoiceStateChanged(VoiceChatState state)
     {
         try
         {
             Application.Current?.Dispatcher.Invoke(() =>
             {
+                _voiceOverlayHideTimer?.Stop();
+                _voiceOverlayHideTimer = null;
+
                 if (state == VoiceChatState.Idle)
                 {
                     _voiceOverlay?.Hide();
                     return;
                 }
+
+                if (state == VoiceChatState.Recording) _voiceCue.PlayRecordStartBeep();
+                else if (state == VoiceChatState.Transcribing) _voiceCue.PlayTranscribeStartBeep();
 
                 _voiceOverlay ??= new VoicePreviewOverlay();
                 _voiceOverlay.SetText(state switch
@@ -658,47 +852,39 @@ public class MainViewModel : INotifyPropertyChanged
                     VoiceChatState.PreviewReady => _voiceSession?.Transcript ?? "",
                     _ => "",
                 });
-                string confirmName = Profile.VoiceConfirmHotkey.VirtualKeyCode == 0
-                    ? "(unbound)"
-                    : SpotifyGameRadio.App.Controls.HotkeyCaptureControl.VirtualKeyName(Profile.VoiceConfirmHotkey.VirtualKeyCode);
-                string discardName = Profile.VoiceDiscardHotkey.VirtualKeyCode == 0
-                    ? "(unbound)"
-                    : SpotifyGameRadio.App.Controls.HotkeyCaptureControl.VirtualKeyName(Profile.VoiceDiscardHotkey.VirtualKeyCode);
-                _voiceOverlay.SetHint($"{confirmName} to copy · {discardName} to clear · hold Record again to redo");
+                _voiceOverlay.SetHint(state == VoiceChatState.PreviewReady
+                    ? _voiceSession?.LastConfidence < VocabularyCorrector.LowConfidenceThreshold
+                        ? "Low confidence — double-check before using. Hold Record to redo."
+                        : "Copied to clipboard — hold Record to redo."
+                    : "");
                 _voiceOverlay.Show();
+
+                if (state == VoiceChatState.PreviewReady)
+                {
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(6)
+                    };
+                    timer.Tick += (_, _) =>
+                    {
+                        timer.Stop();
+                        _voiceOverlay?.Hide();
+                    };
+                    _voiceOverlayHideTimer = timer;
+                    timer.Start();
+                }
             });
         }
         catch (Exception) { /* app is shutting down; nothing to show */ }
     }
 
-    private void EnterInVehicle()
+    /// Shared NaN/Infinity/negative guard for the two vehicle transition
+    /// delays — a slider only ever produces a finite non-negative value, but
+    /// a hand-edited profile JSON might not.
+    private static float ClampDelaySeconds(float delaySeconds)
     {
-        _vehicleExitTimer?.Stop();
-        _vehicleExitTimer = null;
-        _pipeline?.SetVehicleMuted(false);
-        StatusMessage = "In vehicle";
-    }
-
-    private void EnterOutOfVehicle()
-    {
-        _vehicleExitTimer?.Stop();
-        _vehicleExitTimer = null;
-        StatusMessage = $"Exiting vehicle — muting in {Profile.VehicleExitDelaySeconds:0.#}s";
-        float delaySeconds = Profile.VehicleExitDelaySeconds;
-        if (float.IsNaN(delaySeconds) || float.IsInfinity(delaySeconds)) delaySeconds = 0f;
-        delaySeconds = Math.Clamp(delaySeconds, 0f, 60f);
-        var timer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromSeconds(delaySeconds)
-        };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            _pipeline?.SetVehicleMuted(true);
-            StatusMessage = "Out of vehicle";
-        };
-        _vehicleExitTimer = timer;
-        timer.Start();
+        if (float.IsNaN(delaySeconds) || float.IsInfinity(delaySeconds)) return 0f;
+        return Math.Clamp(delaySeconds, 0f, 60f);
     }
 
     /// Snaps the freelook listener orientation back to forward, both in the
@@ -735,7 +921,13 @@ public class MainViewModel : INotifyPropertyChanged
 
     /// Shared start path for the button and the hotkey. Guards the same
     /// conditions as CalibrateFreelookCommand.CanExecute, since the hotkey
-    /// path does not go through it.
+    /// path does not go through it. Runs Cockpit or Outside calibration
+    /// depending on which view is currently active (IsOutsideView) — the two
+    /// measure different things (a game-specific yaw limit vs a full 360°
+    /// spin plus a 180° vertical sweep) and write to different profile
+    /// fields, so this decides which one the button/hotkey will run before
+    /// the session ever starts, and Completed below assumes that decision
+    /// matches whichever result comes back.
     private void BeginCalibration()
     {
         if (_calibrationSession is not null) return;
@@ -747,6 +939,7 @@ public class MainViewModel : INotifyPropertyChanged
 
         Recenter();
 
+        var mode = IsOutsideView ? CalibrationMode.Outside : CalibrationMode.Cockpit;
         var session = new CalibrationSession(_mouseHook);
 
         session.StepChanged += (step, message) => Application.Current?.Dispatcher.Invoke(() =>
@@ -756,13 +949,30 @@ public class MainViewModel : INotifyPropertyChanged
         });
         session.Completed += result => Application.Current?.Dispatcher.Invoke(() =>
         {
-            float sens = Profile.MaxYawDegrees / result.SweepCounts;
-            Profile.MouseSensitivity = sens;
+            if (mode == CalibrationMode.Outside)
+            {
+                // A full 360° spin is a fixed geometric constant, unlike the
+                // cockpit's game-specific yaw limit — so no MaxYawDegrees (or
+                // equivalent) lookup is needed here. Pitch is not calibrated
+                // at all — see CalibrationSession's class doc for why.
+                float yawSens = 360f / result.SweepCounts;
+                Profile.OutsideYawSensitivity = yawSens;
 
-            _announcer.Say("Mark set. Calibration complete.");
-            StatusMessage =
-                $"Calibration complete — sensitivity {sens:0.####} (using Max yaw = {Profile.MaxYawDegrees:0.#}°). " +
-                "Click Save Profile to keep it.";
+                _announcer.Say("Mark set. Calibration complete.");
+                StatusMessage =
+                    $"Calibration complete — outside yaw sensitivity {yawSens:0.####}. " +
+                    "Click Save Profile to keep it.";
+            }
+            else
+            {
+                float sens = Profile.MaxYawDegrees / result.SweepCounts;
+                Profile.MouseSensitivity = sens;
+
+                _announcer.Say("Mark set. Calibration complete.");
+                StatusMessage =
+                    $"Calibration complete — sensitivity {sens:0.####} (using Max yaw = {Profile.MaxYawDegrees:0.#}°). " +
+                    "Click Save Profile to keep it.";
+            }
             TeardownCalibration();
         });
         session.Ended += reason => Application.Current?.Dispatcher.Invoke(() =>
@@ -773,7 +983,7 @@ public class MainViewModel : INotifyPropertyChanged
         });
 
         _calibrationSession = session;
-        session.Start();
+        session.Start(mode);
     }
 
     private void TeardownCalibration()
@@ -788,6 +998,7 @@ public class MainViewModel : INotifyPropertyChanged
     private static string StepPhrase(CalibrationStep step) => step switch
     {
         CalibrationStep.AwaitRightLimit => "Calibration started. Face forward, then turn right until the view stops, and tap.",
+        CalibrationStep.AwaitFullSpin => "Calibration started. Spin all the way around, then tap.",
         _ => "",
     };
 
@@ -814,6 +1025,7 @@ public class MainViewModel : INotifyPropertyChanged
         TapHotkeyWatcher? recenterHotkeyWatcher = null;
         TapHotkeyWatcher? vehicleToggleHotkeyWatcher = null;
         TapHotkeyWatcher? calibrateHotkeyWatcher = null;
+        TapHotkeyWatcher? outsideViewHotkeyWatcher = null;
         try
         {
             // Per-process loopback (WasapiProcessLoopbackCapture) requires Windows 10
@@ -895,6 +1107,16 @@ public class MainViewModel : INotifyPropertyChanged
                 }
                 catch (Exception) { /* app is shutting down */ }
             };
+
+            outsideViewHotkeyWatcher = new TapHotkeyWatcher(Profile.OutsideViewHotkey, new Win32KeyStateSource());
+            outsideViewHotkeyWatcher.Pressed += () =>
+            {
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(OnOutsideViewTogglePressed);
+                }
+                catch (Exception) { /* app is shutting down; nothing to toggle */ }
+            };
             var tracker = new FreelookTracker(mouseHook, Profile);
 
             ISpatializer fallback = new StereoPanSpatializer();
@@ -916,9 +1138,14 @@ public class MainViewModel : INotifyPropertyChanged
             StatusMessage = "Running";
 
             _isInVehicle = true;
-            _vehicleExitConfirmed = false;
-            _vehicleExitTimer?.Stop();
-            _vehicleExitTimer = null;
+            _vehicleWantInVehicle = true;
+            _vehicleTransitionTimer?.Stop();
+            _vehicleTransitionTimer = null;
+            // Outside view starts on by default — most sessions begin outside
+            // the vehicle before getting in, so this matches the common case
+            // rather than requiring a hotkey press every launch.
+            IsOutsideView = true;
+            pipeline.SetOutsideView(true);
             // Skip auto-mute entirely when routing is also active: routing already
             // hides the raw source (by moving its output to a silent device) without
             // touching Mute, so it doesn't collide with this app's own loopback
@@ -942,6 +1169,7 @@ public class MainViewModel : INotifyPropertyChanged
             _recenterHotkeyWatcher = recenterHotkeyWatcher;
             _vehicleToggleHotkeyWatcher = vehicleToggleHotkeyWatcher;
             _calibrateHotkeyWatcher = calibrateHotkeyWatcher;
+            _outsideViewHotkeyWatcher = outsideViewHotkeyWatcher;
 
             // The hook installs on a background thread; give it a moment, then
             // warn if it failed (spec requires freelook-disabled to be visible).
@@ -987,6 +1215,7 @@ public class MainViewModel : INotifyPropertyChanged
             recenterHotkeyWatcher?.Dispose();
             vehicleToggleHotkeyWatcher?.Dispose();
             calibrateHotkeyWatcher?.Dispose();
+            outsideViewHotkeyWatcher?.Dispose();
             _pipeline = null;
             _mouseHook = null;
             _recenterHotkeyWatcher = null;
@@ -1019,14 +1248,17 @@ public class MainViewModel : INotifyPropertyChanged
         _mouseHook?.Dispose();
         _uiTimer?.Stop();
         _uiTimer = null;
-        _vehicleExitTimer?.Stop();
-        _vehicleExitTimer = null;
+        _vehicleTransitionTimer?.Stop();
+        _vehicleTransitionTimer = null;
         _recenterHotkeyWatcher?.Dispose();
         _vehicleToggleHotkeyWatcher?.Dispose();
         _calibrateHotkeyWatcher?.Dispose();
+        _outsideViewHotkeyWatcher?.Dispose();
         _recenterHotkeyWatcher = null;
         _vehicleToggleHotkeyWatcher = null;
         _calibrateHotkeyWatcher = null;
+        _outsideViewHotkeyWatcher = null;
+        IsOutsideView = false;
         if (_mutedProcessName is not null)
         {
             _sessionMuter.Unmute(_mutedProcessName);
@@ -1054,9 +1286,9 @@ public class MainViewModel : INotifyPropertyChanged
             TeardownCalibration();
         }
         _announcer.Dispose();
+        _voiceCue.Dispose();
         _voiceRecordWatcher?.Dispose();
-        _voiceConfirmWatcher?.Dispose();
-        _voiceDiscardWatcher?.Dispose();
+        _voiceOverlayHideTimer?.Stop();
         _voiceSession?.Dispose();
         _speechToText?.Dispose();
         _voiceOverlay?.Close();
@@ -1075,14 +1307,14 @@ public class MainViewModel : INotifyPropertyChanged
 
         public LazyWhisperSpeechToText(Func<string> modelPath) => _modelPath = modelPath;
 
-        public async Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
+        public async Task<TranscriptionResult> TranscribeAsync(float[] pcm16kMono, IReadOnlyList<string> vocabularyTerms, CancellationToken ct)
         {
             // WhisperFactory.FromPath (inside the WhisperSpeechToText ctor) loads
             // the ~488 MB model file synchronously — moved off the calling
             // (UI) thread so first use doesn't freeze the app. The per-call
             // ProcessAsync inference below is already async via Whisper.net.
             _inner ??= await Task.Run(() => new WhisperSpeechToText(_modelPath()), ct);
-            return await _inner.TranscribeAsync(pcm16kMono, vocabularyHint, ct);
+            return await _inner.TranscribeAsync(pcm16kMono, vocabularyTerms, ct);
         }
 
         public void Dispose() => _inner?.Dispose();

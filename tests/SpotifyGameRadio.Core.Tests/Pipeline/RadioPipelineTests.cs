@@ -288,7 +288,7 @@ public class RadioPipelineTests
     {
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
-        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f };
         var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, profile);
         var effectChain = new RadioEffectChain(48000f);
@@ -308,7 +308,7 @@ public class RadioPipelineTests
     {
         var capture = new FakeCaptureService();
         var output = new FakeOutputService();
-        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f, MaxPitchDegrees = 60f };
+        var profile = new RadioProfile { MouseSensitivity = 0.1f, MaxYawDegrees = 90f };
         var input = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource { IsHotkeyHeld = true };
         var tracker = new FreelookTracker(input, profile);
         var effectChain = new RadioEffectChain(48000f);
@@ -344,5 +344,197 @@ public class RadioPipelineTests
         pipeline.ApplyProfile(profile);
 
         Assert.Equal((0.9f, -0.1f, -0.4f), spatializer.LastPosition);
+    }
+
+    [Fact]
+    public void SetOutsideView_True_UsesOutsideVolumeInsteadOfProfileVolume()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        var profile = new RadioProfile { WetDryMix = 0f, Volume = 1.0f, OutsideVolume = 0.25f };
+        pipeline.ApplyProfile(profile);
+
+        pipeline.SetOutsideView(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.25f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOutsideView_False_RestoresProfileVolume()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        var profile = new RadioProfile { WetDryMix = 0f, Volume = 0.8f, OutsideVolume = 0.25f };
+        pipeline.ApplyProfile(profile);
+
+        pipeline.SetOutsideView(true);
+        pipeline.SetOutsideView(false); // back "inside"
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        // Outside toggle must compose like the vehicle mute does: restoring
+        // "inside" must bring back the profile's own Volume, not some stale value.
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.8f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOutsideView_True_CloserSourceDistanceIsLouderThanFartherOne()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        var profile = new RadioProfile { WetDryMix = 0f, OutsideVolume = 1.0f, OutsideSourceDistance = 1f };
+        pipeline.ApplyProfile(profile);
+        pipeline.SetOutsideView(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        float closeLevel = output.WrittenBuffers[0][0];
+
+        profile.OutsideSourceDistance = 10f;
+        pipeline.ApplyProfile(profile);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        float farLevel = output.WrittenBuffers[1][0];
+
+        Assert.True(closeLevel > farLevel,
+            $"expected a closer OutsideSourceDistance to be louder ({closeLevel} vs {farLevel})");
+    }
+
+    [Fact]
+    public void SetOutsideView_True_SourceDistanceAtDefaultAppliesNoGainChange()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        // OutsideSourceDistance left at its RadioProfile default: distance-based
+        // gain must be a no-op there, so existing tuned profiles aren't
+        // retroactively made louder or quieter by this feature existing.
+        var profile = new RadioProfile { WetDryMix = 0f, OutsideVolume = 0.4f };
+        pipeline.ApplyProfile(profile);
+
+        pipeline.SetOutsideView(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.4f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOutsideView_True_SwapsLowPassToOutsideValue()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { WetDryMix = 0f, LowPassHz = 3400f, OutsideLowPassHz = 700f };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new FakeSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        pipeline.SetOutsideView(true);
+
+        Assert.Equal(700f, effectChain.LowPassHz);
+    }
+
+    [Fact]
+    public void ApplyProfile_WhileOutside_KeepsUsingOutsideValues_NotProfileInsideValues()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile
+        {
+            WetDryMix = 0f, LowPassHz = 3400f, Volume = 1.0f,
+            OutsideLowPassHz = 700f, OutsideVolume = 0.25f,
+        };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new FakeSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+        pipeline.SetOutsideView(true);
+
+        // A live tweak to an unrelated slider (e.g. from the UI while running)
+        // re-invokes ApplyProfile — that must not snap the tone back "inside".
+        profile.DistortionDrive = 0.5f;
+        pipeline.ApplyProfile(profile);
+
+        Assert.Equal(700f, effectChain.LowPassHz);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.25f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOutsideView_True_UsesOutsideSourceDistance_NotTheProfilePosition()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile
+        {
+            WetDryMix = 0f, SourceX = 0.9f, SourceY = -0.4f, SourceZ = 0.2f,
+            OutsideSourceDistance = 4f,
+        };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new RecordingSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        pipeline.SetOutsideView(true);
+
+        // Dead-centre-ahead at OutsideSourceDistance, not the profile's
+        // inside (dashboard) position.
+        Assert.Equal((0f, 0f, 4f), spatializer.LastPosition);
+    }
+
+    [Fact]
+    public void SetOutsideView_True_FloorsAnImplausiblyCloseOutsideSourceDistance()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { WetDryMix = 0f, OutsideSourceDistance = 0f };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new RecordingSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        pipeline.SetOutsideView(true);
+
+        // Not an exact (0,0,0), which is an undefined HRTF direction.
+        var (x, y, z) = spatializer.LastPosition;
+        Assert.Equal(0f, x, precision: 5);
+        Assert.Equal(0f, y, precision: 5);
+        Assert.True(z > 0f, "expected a floored non-zero forward offset, not an exact zero vector");
+    }
+
+    [Fact]
+    public void SetOutsideView_False_RestoresTheProfileSourcePosition()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var profile = new RadioProfile { WetDryMix = 0f, SourceX = 0.9f, SourceY = -0.4f, SourceZ = 0.2f };
+        var fakeInput = new SpotifyGameRadio.Core.Tests.Tracking.FakeMouseInputSource();
+        var tracker = new FreelookTracker(fakeInput, profile);
+        var effectChain = new RadioEffectChain(48000f);
+        var spatializer = new RecordingSpatializer();
+        var pipeline = new RadioPipeline(capture, output, spatializer, spatializer, effectChain, tracker, frameSize: 3);
+        pipeline.ApplyProfile(profile);
+        pipeline.Start();
+
+        pipeline.SetOutsideView(true);
+        pipeline.SetOutsideView(false);
+
+        Assert.Equal((0.9f, -0.4f, 0.2f), spatializer.LastPosition);
     }
 }

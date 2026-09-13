@@ -14,33 +14,33 @@ public class VocabularyPromptBuilderTests
     }
 
     [Fact]
-    public void Build_CommaSeparated_JoinsWithCommaSpace()
+    public void Build_CommaSeparated_JoinsWithCommaSpace_EndingInPeriod()
     {
-        Assert.Equal("FOB, RTB, LZ", VocabularyPromptBuilder.Build("FOB, RTB, LZ"));
+        Assert.Equal("FOB, RTB, LZ.", VocabularyPromptBuilder.Build("FOB, RTB, LZ"));
     }
 
     [Fact]
-    public void Build_NewlineSeparated_JoinsWithCommaSpace()
+    public void Build_NewlineSeparated_JoinsWithCommaSpace_EndingInPeriod()
     {
-        Assert.Equal("FOB, RTB, LZ", VocabularyPromptBuilder.Build("FOB\nRTB\nLZ"));
+        Assert.Equal("FOB, RTB, LZ.", VocabularyPromptBuilder.Build("FOB\nRTB\nLZ"));
     }
 
     [Fact]
     public void Build_MixedSeparatorsAndWhitespace_TrimsAndSplitsBoth()
     {
-        Assert.Equal("FOB, RTB, LZ", VocabularyPromptBuilder.Build("  FOB \n, RTB ,\nLZ  "));
+        Assert.Equal("FOB, RTB, LZ.", VocabularyPromptBuilder.Build("  FOB \n, RTB ,\nLZ  "));
     }
 
     [Fact]
     public void Build_DropsBlankEntries()
     {
-        Assert.Equal("FOB, RTB", VocabularyPromptBuilder.Build("FOB,,\n\nRTB,"));
+        Assert.Equal("FOB, RTB.", VocabularyPromptBuilder.Build("FOB,,\n\nRTB,"));
     }
 
     [Fact]
     public void Build_DropsDuplicates_CaseInsensitive_KeepsFirstCasing()
     {
-        Assert.Equal("FOB, RTB", VocabularyPromptBuilder.Build("FOB, RTB, fob, Rtb"));
+        Assert.Equal("FOB, RTB.", VocabularyPromptBuilder.Build("FOB, RTB, fob, Rtb"));
     }
 
     [Fact]
@@ -55,5 +55,23 @@ public class VocabularyPromptBuilderTests
         Assert.True(result.Length <= 200);
         Assert.StartsWith("term1, term2, term3", result);
         Assert.DoesNotContain("term40", result);
+        Assert.EndsWith(".", result);
+    }
+
+    [Fact]
+    public void Build_EndsWithAPeriod_SoThePromptReadsAsAFinishedThought()
+    {
+        // A raw comma-separated list with no closing punctuation measurably
+        // leaks stray punctuation onto the start of the real transcript
+        // (confirmed via real-model A/B testing) — the model reads it as
+        // unfinished list-formatting to continue rather than a completed
+        // thought. A trailing period fixes that.
+        Assert.EndsWith(".", VocabularyPromptBuilder.Build("FOB"));
+    }
+
+    [Fact]
+    public void Build_EmptyInput_StaysEmpty_NoStrayPeriod()
+    {
+        Assert.Equal("", VocabularyPromptBuilder.Build(null));
     }
 }

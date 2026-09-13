@@ -4,9 +4,13 @@ namespace SpotifyGameRadio.Core.Speech;
 
 public enum VoiceChatState { Idle, Recording, Transcribing, PreviewReady }
 
-/// Push-to-talk record -> transcribe -> preview -> confirm/discard/re-record
-/// state machine. Pure aside from its two injected dependencies; unit-tested
-/// with fakes. Modelled on CalibrationSession's event-driven shape.
+/// Push-to-talk record -> transcribe -> preview state machine. There is no
+/// separate confirm/discard step: PreviewReady means the transcript is
+/// already handed to the caller (MainViewModel copies it to the clipboard
+/// immediately via PreviewReady). Re-recording — BeginRecording called again
+/// while in PreviewReady — simply starts over and replaces it. Pure aside
+/// from its two injected dependencies; unit-tested with fakes. Modelled on
+/// CalibrationSession's event-driven shape.
 ///
 /// Threading: this type has no internal locking. Callers must invoke
 /// <see cref="BeginRecording"/>, <see cref="EndRecording"/>,
@@ -26,7 +30,7 @@ public sealed class VoiceChatSession : IDisposable
 
     private readonly IMicrophoneCapture _mic;
     private readonly ISpeechToText _stt;
-    private readonly Func<string> _vocabularyHint;
+    private readonly Func<IReadOnlyList<string>> _vocabularyTerms;
     private readonly Func<string?> _deviceId;
     private CancellationTokenSource? _transcribeCts;
     private bool _disposed;
@@ -34,15 +38,20 @@ public sealed class VoiceChatSession : IDisposable
     public VoiceChatState State { get; private set; } = VoiceChatState.Idle;
     public string? Transcript { get; private set; }
 
+    /// The last transcription's confidence (see TranscriptionResult), or
+    /// null before any transcript exists. Cleared alongside Transcript on
+    /// BeginRecording.
+    public float? LastConfidence { get; private set; }
+
     public event Action<VoiceChatState>? StateChanged;
     public event Action<string>? PreviewReady;
     public event Action<string>? Failed;
 
-    public VoiceChatSession(IMicrophoneCapture mic, ISpeechToText stt, Func<string> vocabularyHint, Func<string?> deviceId)
+    public VoiceChatSession(IMicrophoneCapture mic, ISpeechToText stt, Func<IReadOnlyList<string>> vocabularyTerms, Func<string?> deviceId)
     {
         _mic = mic;
         _stt = stt;
-        _vocabularyHint = vocabularyHint;
+        _vocabularyTerms = vocabularyTerms;
         _deviceId = deviceId;
     }
 
@@ -51,6 +60,7 @@ public sealed class VoiceChatSession : IDisposable
         if (State is VoiceChatState.Recording or VoiceChatState.Transcribing) return;
 
         Transcript = null;
+        LastConfidence = null;
         _mic.Start(_deviceId());
         SetState(VoiceChatState.Recording);
     }
@@ -75,32 +85,26 @@ public sealed class VoiceChatSession : IDisposable
     {
         try
         {
-            string result = await _stt.TranscribeAsync(samples, _vocabularyHint(), ct);
+            var result = await _stt.TranscribeAsync(samples, _vocabularyTerms(), ct);
             if (ct.IsCancellationRequested) return;
 
-            if (string.IsNullOrWhiteSpace(result))
+            if (string.IsNullOrWhiteSpace(result.Text))
             {
                 SetState(VoiceChatState.Idle);
                 Failed?.Invoke("No speech detected.");
                 return;
             }
 
-            Transcript = result;
+            Transcript = result.Text;
+            LastConfidence = result.Confidence;
             SetState(VoiceChatState.PreviewReady);
-            PreviewReady?.Invoke(result);
+            PreviewReady?.Invoke(result.Text);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             SetState(VoiceChatState.Idle);
             Failed?.Invoke(ex.Message);
         }
-    }
-
-    public void Discard()
-    {
-        if (State != VoiceChatState.PreviewReady) return;
-        Transcript = null;
-        SetState(VoiceChatState.Idle);
     }
 
     private void SetState(VoiceChatState state)

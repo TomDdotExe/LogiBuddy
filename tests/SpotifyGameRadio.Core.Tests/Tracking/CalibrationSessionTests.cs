@@ -164,4 +164,94 @@ public class CalibrationSessionTests
         Assert.Equal(CalibrationStep.Failed, session.Step);
         Assert.Contains("timed out", ended, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Start_Outside_MovesToAwaitFullSpin_AndAnnounces()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        CalibrationStep? announced = null;
+        session.StepChanged += (s, _) => announced = s;
+
+        session.Start(CalibrationMode.Outside);
+
+        Assert.Equal(CalibrationStep.AwaitFullSpin, session.Step);
+        Assert.Equal(CalibrationStep.AwaitFullSpin, announced);
+    }
+
+    [Fact]
+    public void Outside_Mark_CompletesWithSweepCounts()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        CalibrationResult? result = null;
+        session.Completed += r => result = r;
+
+        session.Start(CalibrationMode.Outside);
+        input.RaiseMove(3600, 0); // full 360 spin
+        session.Mark();
+
+        Assert.Equal(CalibrationStep.Completed, session.Step);
+        Assert.Equal(3600f, result!.SweepCounts, precision: 3);
+    }
+
+    [Fact]
+    public void Outside_SweepCounts_IsAbsoluteValue_DirectionAgnostic()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        CalibrationResult? result = null;
+        session.Completed += r => result = r;
+
+        session.Start(CalibrationMode.Outside);
+        input.RaiseMove(-3600, 0);
+        session.Mark();
+
+        Assert.Equal(3600f, result!.SweepCounts, precision: 3);
+    }
+
+    [Fact]
+    public void Outside_IgnoresVerticalMovement()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        CalibrationResult? result = null;
+        session.Completed += r => result = r;
+
+        session.Start(CalibrationMode.Outside);
+        input.RaiseMove(3600, 9999); // incidental vertical drift during the spin — pitch isn't calibrated at all
+        session.Mark();
+
+        Assert.Equal(3600f, result!.SweepCounts, precision: 3);
+    }
+
+    [Fact]
+    public void Outside_SweepTooSmall_Fails()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+        var completed = false;
+        string? ended = null;
+        session.Completed += _ => completed = true;
+        session.Ended += r => ended = r;
+
+        session.Start(CalibrationMode.Outside);
+        input.RaiseMove(20, 0);
+        session.Mark();
+
+        Assert.Equal(CalibrationStep.Failed, session.Step);
+        Assert.False(completed);
+        Assert.False(string.IsNullOrWhiteSpace(ended));
+    }
+
+    [Fact]
+    public void Cockpit_Mode_IsTheDefault_WhenStartCalledWithNoArguments()
+    {
+        var input = new FakeMouseInputSource();
+        using var session = NewSession(input);
+
+        session.Start();
+
+        Assert.Equal(CalibrationStep.AwaitRightLimit, session.Step);
+    }
 }

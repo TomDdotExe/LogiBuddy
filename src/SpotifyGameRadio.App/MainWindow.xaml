@@ -31,6 +31,26 @@
 
                     <Border Style="{StaticResource CardPanel}">
                         <StackPanel>
+                            <TextBlock Text="Profiles" Style="{StaticResource SectionHeaderText}" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="Name:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <TextBox Width="180" Text="{Binding Profile.Name, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Type a new name and click Save to save-as; type an existing loaded profile's name and Save to rename it." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="Load:" Width="90" Style="{StaticResource RowLabelText}" />
+                                <ComboBox Width="180" ItemsSource="{Binding AvailableProfiles}"
+                                          SelectedItem="{Binding SelectedProfileName}" />
+                                <Button Content="Load" Command="{Binding LoadProfileCommand}" CommandParameter="{Binding SelectedProfileName}" Margin="8,0,0,0" />
+                                <Button Content="Delete" Command="{Binding DeleteProfileCommand}" CommandParameter="{Binding SelectedProfileName}" Margin="8,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="Save (bottom bar) writes the current settings under the Name above." Style="{StaticResource MutedText}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
                             <TextBlock Text="Source &amp; Routing" Style="{StaticResource SectionHeaderText}" />
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -123,26 +143,59 @@
                             </Grid>
                             <TextBlock Text="Simulates getting in/out of a vehicle." Style="{StaticResource MutedText}" Margin="0,-6,0,10" />
 
-                            <controls:LabeledSlider Label="Exit delay" Minimum="0.1" Maximum="5"
+                            <controls:LabeledSlider Label="Exit delay" Minimum="0" Maximum="5"
                                                      SmallChange="0.1" TickFrequency="0.1" IsSnapToTickEnabled="True"
                                                      Value="{Binding Profile.VehicleExitDelaySeconds}" ValueFormat="{}{0:0.0} s"
                                                      Margin="0,0,0,4"
-                                                     ToolTip="Delay before the radio mutes after toggling 'out of vehicle', for games with an exit animation (e.g. Squad)." />
-                            <TextBlock Text="Entering back &quot;in&quot; is always immediate." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                                                     ToolTip="Delay before the radio mutes after requesting 'out of vehicle', for games with an exit animation (e.g. Squad). 0 = mute immediately. In hold-to-exit mode below, this is also how long you must hold the key — release early and the exit never happens." />
 
-                            <CheckBox x:Name="HoldToExitCheck" Content="Hold to exit (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
+                            <CheckBox x:Name="HoldToExitCheck" Content="Hold to exit/enter (instead of tap to toggle)" IsChecked="{Binding Profile.HoldToExitVehicle}"
                                       Margin="0,0,0,10"
-                                      ToolTip="Off (default): tap the vehicle toggle hotkey once to exit, again to return. On: hold the key down to exit, release to return — avoids accidental exits/entries when the same key is reused for something else in a game." />
+                                      ToolTip="Off (default): a single tap starts the delay counting down regardless of what you do with the key afterward. On: you must hold the key down for the full delay to exit or re-enter — release early and nothing happens, which also makes an accidental tap harmless." />
 
-                            <controls:LabeledSlider Label="Min hold to exit" Minimum="0.1" Maximum="3"
+                            <controls:LabeledSlider Label="Reactivate delay" Minimum="0" Maximum="5"
                                                      SmallChange="0.1" TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                                     Value="{Binding Profile.MinHoldToExitSeconds}" ValueFormat="{}{0:0.0} s"
-                                                     Margin="0,0,0,4" IsEnabled="{Binding IsChecked, ElementName=HoldToExitCheck}"
-                                                     ToolTip="Only used in hold-to-exit mode. Releasing the key before this much time has passed cancels the exit (back to 'in vehicle'). Releasing at or after it confirms the exit — set it just under your game's own hold-to-exit duration so holding slightly longer doesn't cancel a successful exit." />
-                            <TextBlock Text="Re-entry (releasing again once out) is always immediate." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
+                                                     Value="{Binding Profile.VehicleEnterDelaySeconds}" ValueFormat="{}{0:0.0} s"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Delay before the radio un-mutes after requesting 're-entry', for games with an enter-vehicle animation. 0 = un-mute immediately. In hold-to-exit mode, this is also how long you must hold the key to get back in." />
 
                             <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
                                       ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource CardPanel}">
+                        <StackPanel>
+                            <TextBlock Text="Perspective" Style="{StaticResource SectionHeaderText}" />
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Outside view hotkey" Style="{StaticResource RowLabelText}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <controls:HotkeyCaptureControl Hotkey="{Binding Profile.OutsideViewHotkey, Mode=TwoWay}" />
+                                    <Button Content="Toggle View" Command="{Binding OutsideViewToggleCommand}" Margin="8,0,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Starts in outside view on Start. Tap to switch between inside-cockpit and outside third-person sound. Outside, freelook pans freely a full 360° (no cockpit limit) and the source is centred on the camera's pivot point instead of the dashboard position below. Disabled while out of the vehicle (Vehicle toggle above) — there's no inside/outside distinction to make there, and it keeps an accidental press while typing in-game chat from silently flipping it." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                            <controls:LabeledSlider Label="Outside low-pass" Minimum="200" Maximum="4000"
+                                                     Value="{Binding Profile.OutsideLowPassHz}" ValueFormat="{}{0:0} Hz"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Low-pass cutoff used in outside view instead of the Tone Shaping low-pass above — the main 'how muffled' control. Lower = more muffled, as if heard through the vehicle's body/windows from outside." />
+                            <controls:LabeledSlider Label="Outside volume" Minimum="0" Maximum="1"
+                                                     Value="{Binding Profile.OutsideVolume}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10" />
+                            <controls:LabeledSlider Label="Outside stereo width" Minimum="0" Maximum="2"
+                                                     Value="{Binding Profile.OutsideStereoWidth}" ValueFormat="{}{0:0.00}"
+                                                     Margin="0,0,0,10"
+                                                     ToolTip="Narrower than the normal Stereo width usually sounds more like a distant, indirect source." />
+                            <controls:LabeledSlider Label="Outside source distance" Minimum="0.5" Maximum="10"
+                                                     SmallChange="0.5" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                                                     Value="{Binding Profile.OutsideSourceDistance}" ValueFormat="{}{0:0.0} m"
+                                                     ToolTip="How far away the source sits in outside view. Also drives loudness — closer is louder, farther is quieter — since that's the main way an orbiting source actually reads as 'near' or 'far'; too close and panning also barely moves the sound at all, so this is what drives a clear left/right/up/down sweep as you look around." />
                         </StackPanel>
                     </Border>
 
@@ -193,10 +246,11 @@
                                                              Value="{Binding Profile.MaxYawDegrees}" ValueFormat="{}{0:0}°"
                                                              Margin="0,0,0,10"
                                                              ToolTip="The reference angle calibration uses — set this to roughly match your game's actual turn limit before calibrating. Also the live clamp on how far freelook can pan." />
-                                    <controls:LabeledSlider Label="Max pitch" Minimum="0" Maximum="90"
-                                                             Value="{Binding Profile.MaxPitchDegrees}" ValueFormat="{}{0:0}°"
-                                                             Margin="0,0,0,4" />
-                                    <TextBlock Text="Currently unused — vertical panning is disabled." Style="{StaticResource MutedText}" />
+                                    <controls:LabeledSlider Label="Outside pitch sensitivity" Minimum="0.01" Maximum="1.0"
+                                                             Value="{Binding Profile.PitchSensitivity}" ValueFormat="{}{0:0.00}"
+                                                             Margin="0,0,0,4"
+                                                             ToolTip="Degrees per mouse count for outside-view pitch. Manual only, not set by calibration — judging 'straight up'/'straight down' needs the game's own camera to confirm it, and many games clamp well short of that, so there's no reliable reference to calibrate against. Unused inside the cockpit, where pitch stays disabled." />
+                                    <TextBlock Text="Inside: pitch is unused, vertical panning stays disabled there. Outside: pitch is clamped to a fixed ±90° (straight up to straight down)." Style="{StaticResource MutedText}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </Expander>
 
@@ -209,7 +263,7 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <controls:HotkeyCaptureControl Hotkey="{Binding Profile.CalibrateHotkey, Mode=TwoWay}" />
                                     <Button Content="Calibrate freelook" Command="{Binding CalibrateFreelookCommand}" Margin="8,0,0,0"
-                                            ToolTip="While running: face forward, turn right until the view stops, then tap the calibrate hotkey. Sets mouse sensitivity using the Max yaw slider above as the reference angle — set that to roughly match your game's actual turn limit first. Click again to cancel. (Vertical/pitch panning is disabled for now.)" />
+                                            ToolTip="While running: calibrates whichever view is currently active — yaw only, pitch is a manual slider (see Advanced). Inside: face forward, turn right until the view stops, then tap the calibrate hotkey — sets mouse sensitivity using the Max yaw slider above as the reference angle, so set that to roughly match your game's turn limit first. Outside: switch to outside view first, then spin all the way around and tap — a known 360°, no game-specific reference needed. Click again to cancel." />
                                 </StackPanel>
                             </Grid>
                             <TextBlock Text="Run while playing; needs a freelook key too." Style="{StaticResource MutedText}" />
@@ -219,13 +273,34 @@
                     <Border Style="{StaticResource CardPanel}">
                         <StackPanel>
                             <TextBlock Text="Spatial Position" Style="{StaticResource SectionHeaderText}" />
+                            <TextBlock Text="Outside view: the listener orbits a fixed, centred source instead." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Visibility="{Binding IsOutsideView, Converter={StaticResource BoolToVis}}" />
                             <StackPanel Orientation="Horizontal">
                                 <controls:SourcePositionCanvas
                                     SourceX="{Binding Profile.SourceX}"
                                     SourceZ="{Binding Profile.SourceZ}"
                                     ListenerYaw="{Binding ListenerYaw}"
-                                    ListenerPitch="{Binding ListenerPitch}" />
+                                    ListenerPitch="{Binding ListenerPitch}"
+                                    IsOutsideView="{Binding IsOutsideView}" />
+                                <StackPanel Margin="16,0,0,0" HorizontalAlignment="Center"
+                                            Visibility="{Binding IsOutsideView, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="Pitch" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                    <Border Style="{StaticResource ReadoutChip}" HorizontalAlignment="Center"
+                                            ToolTip="Live outside-view look-up/down angle. Driven by panning, not settable here.">
+                                        <TextBlock Text="{Binding ListenerPitch, StringFormat={}{0:0}°}" Style="{StaticResource ReadoutText}" />
+                                    </Border>
+                                </StackPanel>
                                 <StackPanel Margin="16,0,0,0" HorizontalAlignment="Center">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsOutsideView}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
                                     <TextBlock Text="Height" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,0,0,6" />
                                     <Slider Orientation="Vertical" Style="{StaticResource VerticalSliderStyle}"
                                             Minimum="-2" Maximum="2" Height="180"
@@ -252,28 +327,7 @@
                                 <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
                                     Hotkey="{Binding Profile.VoiceRecordHotkey, Mode=TwoWay}" />
                             </Grid>
-                            <TextBlock Text="Hold to record, release to transcribe." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="130" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Confirm hotkey" Style="{StaticResource RowLabelText}" />
-                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
-                                    Hotkey="{Binding Profile.VoiceConfirmHotkey, Mode=TwoWay}" />
-                            </Grid>
-                            <TextBlock Text="Copies the preview to the clipboard — paste it yourself." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
-
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="130" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Discard hotkey" Style="{StaticResource RowLabelText}" />
-                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
-                                    Hotkey="{Binding Profile.VoiceDiscardHotkey, Mode=TwoWay}" />
-                            </Grid>
+                            <TextBlock Text="Hold to record, release to transcribe — copied to the clipboard automatically. Hold again to redo (replaces it)." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                                 <TextBlock Text="Microphone:" Width="90" Style="{StaticResource RowLabelText}" />
@@ -311,7 +365,8 @@
                 <StackPanel Orientation="Horizontal">
                     <Button Content="Start" Command="{Binding StartCommand}" Style="{StaticResource PrimaryButton}" Width="90" Margin="0,0,8,0" />
                     <Button Content="Stop" Command="{Binding StopCommand}" Width="90" Margin="0,0,8,0" />
-                    <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="110" />
+                    <Button Content="Save Profile" Command="{Binding SaveProfileCommand}" Width="110" Margin="0,0,8,0" />
+                    <Button Content="Check for Updates" Command="{Binding CheckForUpdatesCommand}" Width="140" />
                     <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource AttentionBrush}"
                                TextWrapping="Wrap"
                                Visibility="{Binding RestartRequired, Converter={StaticResource BoolToVis}}"
@@ -321,6 +376,9 @@
                     <TextBlock Text="{Binding StatusMessage}" FontWeight="SemiBold" TextWrapping="Wrap" MaxWidth="500" />
                     <TextBlock Text="{Binding BufferUnderrunCount, StringFormat=' (underruns: {0})'}" Margin="8,0,0,0"
                                Style="{StaticResource MutedText}" />
+                    <TextBlock Text="{Binding UpdateAvailableMessage}" Margin="8,0,0,0"
+                               Foreground="{StaticResource AttentionBrush}"
+                               Visibility="{Binding HasUpdateAvailable, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </StackPanel>
         </Border>

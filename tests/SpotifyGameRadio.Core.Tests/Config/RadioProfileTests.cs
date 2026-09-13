@@ -70,4 +70,59 @@ public class RadioProfileTests
         Assert.Contains(nameof(RadioProfile.MeasuredYawSweepCounts), changed);
         Assert.Contains(nameof(RadioProfile.MeasuredMaxOffAxisDegrees), changed);
     }
+
+    [Fact]
+    public void VehicleReentryFields_HaveExpectedDefaults()
+    {
+        var profile = new RadioProfile();
+
+        Assert.Equal(3.0f, profile.VehicleEnterDelaySeconds);
+    }
+
+    [Fact]
+    public void AssigningVehicleReentryFields_RaisesPropertyChanged()
+    {
+        var profile = new RadioProfile();
+        var changed = new List<string?>();
+        profile.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        profile.VehicleEnterDelaySeconds = 1.5f;
+
+        Assert.Contains(nameof(RadioProfile.VehicleEnterDelaySeconds), changed);
+    }
+
+    [Fact]
+    public void OutsideViewFields_HaveExpectedDefaults()
+    {
+        var profile = new RadioProfile();
+
+        Assert.Equal(0, profile.OutsideViewHotkey.VirtualKeyCode); // unbound
+        Assert.Equal(900f, profile.OutsideLowPassHz);
+        Assert.Equal(0.6f, profile.OutsideVolume);
+        Assert.Equal(0.4f, profile.OutsideStereoWidth);
+        Assert.Equal(5.0f, profile.OutsideSourceDistance);
+        Assert.Equal(0.15f, profile.OutsideYawSensitivity);
+    }
+
+    [Fact]
+    public void AssigningOutsideViewFields_RaisesPropertyChanged()
+    {
+        var profile = new RadioProfile();
+        var changed = new List<string?>();
+        profile.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        profile.OutsideViewHotkey = new FreelookHotkey { VirtualKeyCode = 0x50 };
+        profile.OutsideLowPassHz = 700f;
+        profile.OutsideVolume = 0.5f;
+        profile.OutsideStereoWidth = 0.3f;
+        profile.OutsideSourceDistance = 7f;
+        profile.OutsideYawSensitivity = 0.4f;
+
+        Assert.Contains(nameof(RadioProfile.OutsideViewHotkey), changed);
+        Assert.Contains(nameof(RadioProfile.OutsideLowPassHz), changed);
+        Assert.Contains(nameof(RadioProfile.OutsideVolume), changed);
+        Assert.Contains(nameof(RadioProfile.OutsideStereoWidth), changed);
+        Assert.Contains(nameof(RadioProfile.OutsideSourceDistance), changed);
+        Assert.Contains(nameof(RadioProfile.OutsideYawSensitivity), changed);
+    }
 }

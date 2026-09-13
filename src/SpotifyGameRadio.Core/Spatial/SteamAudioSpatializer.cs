@@ -89,17 +89,22 @@ public class SteamAudioSpatializer : ISpatializer, IDisposable
 
     public unsafe void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
     {
-        // Rotate the fixed source into listener space (same convention as
-        // StereoPanSpatializer) before handing it to Steam Audio as a direction vector.
-        // NOTE: unlike the brief's pseudocode (which used cos(-yaw)/sin(-yaw) and was
-        // found to have a sign bug — see Task 7's StereoPanSpatializer fix), this uses
-        // the verified-correct, non-negated yaw so a listener turning right makes a
-        // world-fixed source swing toward their left ear.
-        float cosYaw = MathF.Cos(_yawRadians);
-        float sinYaw = MathF.Sin(_yawRadians);
-        float relativeX = _sourceX * cosYaw - _sourceZ * sinYaw;
-        float relativeZ = _sourceX * sinYaw + _sourceZ * cosYaw;
-        float relativeY = _sourceY; // pitch cross-coupling ignored for a car-mounted source
+        // Rotate the fixed source into listener space (see SourceRotation for
+        // the yaw/pitch convention — same one StereoPanSpatializer uses).
+        // NOTE: an earlier version of the yaw-only formula here used
+        // cos(-yaw)/sin(-yaw) and was found to have a sign bug — see Task 7's
+        // StereoPanSpatializer fix — so this deliberately matches the
+        // verified-correct, non-negated convention in SourceRotation.
+        var (relativeX, relativeY, relativeZ) = SourceRotation.Rotate(_sourceX, _sourceY, _sourceZ, _yawRadians, _pitchRadians);
+
+        // A source position at (or extremely close to) the listener — reachable
+        // via the outside-view pivot collapse, or simply a source position
+        // manually set to (0,0,0) — has no defined direction. iplBinauralEffectApply
+        // likely normalizes this vector internally; a zero-length one risks a
+        // divide-by-zero (NaN output) rather than a crash, so nudge it forward
+        // instead of trusting that to be handled gracefully.
+        if (relativeX * relativeX + relativeY * relativeY + relativeZ * relativeZ < 1e-8f)
+            relativeZ = 0.01f;
 
         var direction = new IPLVector3 { x = relativeX, y = relativeY, z = -relativeZ };
 

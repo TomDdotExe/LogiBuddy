@@ -24,13 +24,10 @@ public class StereoPanSpatializer : ISpatializer
 
     public void Process(float[] monoInput, int count, float[] stereoOutputInterleaved)
     {
-        // Rotate the fixed source position into listener space by applying
-        // the listener's yaw (listener turning right makes a world-fixed
-        // source appear to swing left in listener space).
-        float cosYaw = MathF.Cos(_yawRadians);
-        float sinYaw = MathF.Sin(_yawRadians);
-        float relativeX = _sourceX * cosYaw - _sourceZ * sinYaw;
-        float relativeZ = _sourceX * sinYaw + _sourceZ * cosYaw;
+        // Rotate the fixed source position into listener space (see
+        // SourceRotation for the yaw/pitch convention). relativeY (elevation)
+        // is unused here — this fallback has no elevation cue, just left/right.
+        var (relativeX, _, relativeZ) = SourceRotation.Rotate(_sourceX, _sourceY, _sourceZ, _yawRadians, _pitchRadians);
 
         float azimuth = MathF.Atan2(relativeX, MathF.Max(relativeZ, 0.0001f)); // 0 = ahead, +pi/2 = right
         float panRaw = azimuth / (MathF.PI / 2f);

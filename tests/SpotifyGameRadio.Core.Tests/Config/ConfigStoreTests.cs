@@ -36,7 +36,6 @@ public class ConfigStoreTests
                 Hotkey = new FreelookHotkey { VirtualKeyCode = 0x12 },
                 MouseSensitivity = 0.2f,
                 MaxYawDegrees = 80f,
-                MaxPitchDegrees = 50f,
                 SpringBackRatePerSecond = 500f,
                 AutoRouteSource = false,
                 RouteSourceToDeviceId = "device-cable-1",
@@ -128,16 +127,19 @@ public class ConfigStoreTests
             Assert.Equal(0, loaded.VehicleToggleHotkey.VirtualKeyCode); // default retained (unbound)
             Assert.Equal(3.0f, loaded.VehicleExitDelaySeconds);         // default retained
             Assert.False(loaded.HoldToExitVehicle);                     // default retained
-            Assert.Equal(0.5f, loaded.MinHoldToExitSeconds);            // default retained
+            Assert.Equal(3.0f, loaded.VehicleEnterDelaySeconds);        // default retained
             Assert.False(loaded.AutoMuteSource);                        // default retained
             Assert.Equal(0, loaded.CalibrateHotkey.VirtualKeyCode);     // default retained (unbound)
             Assert.Equal(0f, loaded.MeasuredYawSweepCounts);            // default retained
             Assert.Equal(0f, loaded.MeasuredMaxOffAxisDegrees);         // default retained
             Assert.Equal(0, loaded.VoiceRecordHotkey.VirtualKeyCode);       // default retained (unbound)
-            Assert.Equal(0, loaded.VoiceConfirmHotkey.VirtualKeyCode);      // default retained (unbound)
-            Assert.Equal(0, loaded.VoiceDiscardHotkey.VirtualKeyCode);      // default retained (unbound)
             Assert.Equal(SpotifyGameRadio.Core.Speech.VoiceVocabularyDefaults.Starter, loaded.VoiceCustomVocabulary); // default retained
             Assert.Equal("", loaded.VoiceMicrophoneDeviceId);              // default retained
+            Assert.Equal(0, loaded.OutsideViewHotkey.VirtualKeyCode);      // default retained (unbound)
+            Assert.Equal(900f, loaded.OutsideLowPassHz);                   // default retained
+            Assert.Equal(0.6f, loaded.OutsideVolume);                      // default retained
+            Assert.Equal(0.4f, loaded.OutsideStereoWidth);                 // default retained
+            Assert.Equal(5.0f, loaded.OutsideSourceDistance);              // default retained
         }
         finally
         {

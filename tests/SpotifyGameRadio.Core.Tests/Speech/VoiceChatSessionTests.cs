@@ -16,20 +16,21 @@ public class FakeMicrophoneCapture : IMicrophoneCapture
 public class FakeSpeechToText : ISpeechToText
 {
     public string Result = "dropping fuel supplies on tower 2 fob";
+    public float Confidence = 1f;
     public Exception? ThrowOnTranscribe;
-    public string? LastVocabularyHint;
+    public IReadOnlyList<string>? LastVocabularyTerms;
 
     // When set, TranscribeAsync returns this TCS's Task instead of an
     // already-completed one, letting a test control exactly when
     // transcription "completes" and observe genuinely in-flight state.
-    public TaskCompletionSource<string>? PendingTranscription;
+    public TaskCompletionSource<TranscriptionResult>? PendingTranscription;
 
-    public Task<string> TranscribeAsync(float[] pcm16kMono, string vocabularyHint, CancellationToken ct)
+    public Task<TranscriptionResult> TranscribeAsync(float[] pcm16kMono, IReadOnlyList<string> vocabularyTerms, CancellationToken ct)
     {
-        LastVocabularyHint = vocabularyHint;
+        LastVocabularyTerms = vocabularyTerms;
         if (PendingTranscription is not null) return PendingTranscription.Task;
-        if (ThrowOnTranscribe is not null) return Task.FromException<string>(ThrowOnTranscribe);
-        return Task.FromResult(Result);
+        if (ThrowOnTranscribe is not null) return Task.FromException<TranscriptionResult>(ThrowOnTranscribe);
+        return Task.FromResult(new TranscriptionResult(Result, Confidence));
     }
 }
 
@@ -38,7 +39,7 @@ public class VoiceChatSessionTests
     private static VoiceChatSession CreateSession(
         FakeMicrophoneCapture mic, FakeSpeechToText stt, out List<VoiceChatState> states, out List<string> previews, out List<string> failures)
     {
-        var session = new VoiceChatSession(mic, stt, () => "", () => null);
+        var session = new VoiceChatSession(mic, stt, () => Array.Empty<string>(), () => null);
         var capturedStates = new List<VoiceChatState>();
         var capturedPreviews = new List<string>();
         var capturedFailures = new List<string>();
@@ -76,6 +77,35 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
+    public void HappyPath_ExposesTranscriptionConfidence()
+    {
+        var mic = new FakeMicrophoneCapture();
+        var stt = new FakeSpeechToText { Confidence = 0.42f };
+        using var session = CreateSession(mic, stt, out _, out _, out _);
+
+        session.BeginRecording();
+        session.EndRecording();
+
+        Assert.Equal(0.42f, session.LastConfidence);
+    }
+
+    [Fact]
+    public void BeginRecording_WhilePreviewReady_ClearsOldConfidenceAndStartsOver()
+    {
+        var mic = new FakeMicrophoneCapture();
+        var stt = new FakeSpeechToText();
+        using var session = CreateSession(mic, stt, out _, out _, out _);
+
+        session.BeginRecording();
+        session.EndRecording();
+        Assert.NotNull(session.LastConfidence);
+
+        session.BeginRecording();
+
+        Assert.Null(session.LastConfidence);
+    }
+
+    [Fact]
     public void EndRecording_BufferTooShort_ReturnsToIdleWithoutTranscribing()
     {
         var mic = new FakeMicrophoneCapture { NextStopResult = new float[100] }; // well under 200ms @ 16kHz
@@ -88,7 +118,7 @@ public class VoiceChatSessionTests
         Assert.Equal(VoiceChatState.Idle, session.State);
         Assert.Empty(previews);
         Assert.Empty(failures);
-        Assert.Null(stt.LastVocabularyHint); // TranscribeAsync was never called
+        Assert.Null(stt.LastVocabularyTerms); // TranscribeAsync was never called
     }
 
     [Fact]
@@ -122,23 +152,6 @@ public class VoiceChatSessionTests
     }
 
     [Fact]
-    public void Discard_FromPreviewReady_ReturnsToIdleAndClearsTranscript()
-    {
-        var mic = new FakeMicrophoneCapture();
-        var stt = new FakeSpeechToText();
-        using var session = CreateSession(mic, stt, out _, out _, out _);
-
-        session.BeginRecording();
-        session.EndRecording();
-        Assert.Equal(VoiceChatState.PreviewReady, session.State);
-
-        session.Discard();
-
-        Assert.Equal(VoiceChatState.Idle, session.State);
-        Assert.Null(session.Transcript);
-    }
-
-    [Fact]
     public void BeginRecording_WhilePreviewReady_ClearsOldTranscriptAndStartsOver()
     {
         var mic = new FakeMicrophoneCapture();
@@ -159,7 +172,7 @@ public class VoiceChatSessionTests
     public async Task Dispose_DuringTranscription_SuppressesLaterEvents()
     {
         var mic = new FakeMicrophoneCapture();
-        var tcs = new TaskCompletionSource<string>();
+        var tcs = new TaskCompletionSource<TranscriptionResult>();
         var stt = new FakeSpeechToText { PendingTranscription = tcs };
         var session = CreateSession(mic, stt, out _, out var previews, out var failures);
 
@@ -178,7 +191,7 @@ public class VoiceChatSessionTests
         // ct.IsCancellationRequested guard in RunTranscription works as
         // intended, this stale result must not produce a PreviewReady/Failed
         // event.
-        tcs.SetResult("some transcript");
+        tcs.SetResult(new TranscriptionResult("some transcript", 1f));
 
         // Give the "async void" continuation a chance to run in case it
         // isn't inlined synchronously by SetResult on this thread. A short
@@ -195,7 +208,7 @@ public class VoiceChatSessionTests
     [Fact]
     public void Dispose_IsSafeToCallTwice()
     {
-        var session = new VoiceChatSession(new FakeMicrophoneCapture(), new FakeSpeechToText(), () => "", () => null);
+        var session = new VoiceChatSession(new FakeMicrophoneCapture(), new FakeSpeechToText(), () => Array.Empty<string>(), () => null);
         session.Dispose();
         session.Dispose(); // must not throw
     }

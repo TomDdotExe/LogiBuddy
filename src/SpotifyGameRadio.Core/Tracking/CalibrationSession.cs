@@ -3,24 +3,39 @@ using Timer = System.Timers.Timer;
 
 namespace SpotifyGameRadio.Core.Tracking;
 
-public enum CalibrationStep { Idle, AwaitRightLimit, Completed, Failed, Aborted }
+public enum CalibrationMode { Cockpit, Outside }
+
+public enum CalibrationStep { Idle, AwaitRightLimit, AwaitFullSpin, Completed, Failed, Aborted }
 
 /// SweepCounts is the mouse-count magnitude measured from centre to the
-/// game's actual yaw limit.
+/// game's actual yaw limit (Cockpit mode) or across a full 360° spin
+/// (Outside mode).
 public sealed record CalibrationResult(float SweepCounts);
 
 /// Guided freelook calibration. Subscribes to a live mouse input source and
 /// sums horizontal counts while active — it does NOT require the freelook
 /// key to be held, so it works with hold-to-look, toggle, and always-on
-/// freelook alike. One mark after Start(): turn right until the game's view
-/// stops, then mark. Unlike pitch (where straight-up-to-straight-down is
-/// always exactly 180° by geometry, regardless of the game), yaw's actual
-/// limit is game-specific and often well short of 90° — so there's no
-/// universal fixed angle to sweep to here. Instead the view model derives
-/// MouseSensitivity from the profile's own MaxYawDegrees (the angle the user
-/// has told it the game allows): MouseSensitivity = MaxYawDegrees /
-/// SweepCounts. Vertical movement during the sweep is ignored, so it
-/// doesn't matter that real human turns are never perfectly horizontal.
+/// freelook alike. Yaw only: pitch calibration was tried and dropped —
+/// unlike a full 360° spin (a purely physical, kinesthetic gesture that
+/// doesn't depend on what the game shows), judging "straight up" or
+/// "straight down" requires visually confirming against the game's own
+/// camera, which many games clamp well short of vertical — so there's no
+/// reliable universal reference to calibrate against. PitchSensitivity is
+/// a plain manual setting instead (see RadioProfile).
+///
+/// Cockpit mode: one mark after Start(): turn right until the game's view
+/// stops, then mark. Yaw's actual limit is game-specific and often well
+/// short of 90° — so there's no universal fixed angle to sweep to here.
+/// Instead the view model derives MouseSensitivity from the profile's own
+/// MaxYawDegrees (the angle the user has told it the game allows):
+/// MouseSensitivity = MaxYawDegrees / SweepCounts. Vertical movement during
+/// the sweep is ignored, so it doesn't matter that real human turns are
+/// never perfectly horizontal.
+///
+/// Outside mode: one mark after Start(): spin a full 360° and mark — unlike
+/// cockpit yaw, the outside camera's horizontal range is unbounded, so a
+/// full spin is a known geometric constant rather than a game-specific
+/// limit. The view model derives OutsideYawSensitivity = 360 / SweepCounts.
 public sealed class CalibrationSession : IDisposable
 {
     private const long MinValidSweepCounts = 50;
@@ -52,7 +67,7 @@ public sealed class CalibrationSession : IDisposable
         _idleTimer.Elapsed += OnIdleTimeout;
     }
 
-    private bool IsActive => Step is CalibrationStep.AwaitRightLimit;
+    private bool IsActive => Step is CalibrationStep.AwaitRightLimit or CalibrationStep.AwaitFullSpin;
 
     private void OnMouseMoved(int dx, int dy)
     {
@@ -60,17 +75,18 @@ public sealed class CalibrationSession : IDisposable
         Interlocked.Add(ref _accumX, dx);
     }
 
-    public void Start() => Raise(() =>
+    public void Start(CalibrationMode mode = CalibrationMode.Cockpit) => Raise(() =>
     {
         lock (_gate)
         {
             if (Step != CalibrationStep.Idle) return null;
             Interlocked.Exchange(ref _accumX, 0);
-            Step = CalibrationStep.AwaitRightLimit;
+            Step = mode == CalibrationMode.Outside ? CalibrationStep.AwaitFullSpin : CalibrationStep.AwaitRightLimit;
             RestartTimer();
-            return (Step,
-                "Calibration started. Face forward, then turn right until the view stops, then tap Mark.",
-                (CalibrationResult?)null);
+            string message = mode == CalibrationMode.Outside
+                ? "Calibration started. Spin all the way around (360°), then tap Mark."
+                : "Calibration started. Face forward, then turn right until the view stops, then tap Mark.";
+            return (Step, message, (CalibrationResult?)null);
         }
     });
 
@@ -78,20 +94,27 @@ public sealed class CalibrationSession : IDisposable
     {
         lock (_gate)
         {
-            if (Step != CalibrationStep.AwaitRightLimit) return null;
-            _idleTimer.Stop();
-            long sweep = Math.Abs(Interlocked.Read(ref _accumX));
-            if (sweep < MinValidSweepCounts)
+            return Step switch
             {
-                Step = CalibrationStep.Failed;
-                return (Step,
-                    "That sweep was too small. Try again — turn all the way to the view's limit.",
-                    (CalibrationResult?)null);
-            }
-            Step = CalibrationStep.Completed;
-            return (Step, "Mark set. Calibration complete.", new CalibrationResult(sweep));
+                CalibrationStep.AwaitRightLimit => CompleteSweep("That sweep was too small. Try again — turn all the way to the view's limit."),
+                CalibrationStep.AwaitFullSpin => CompleteSweep("That spin was too small. Try again — spin all the way around."),
+                _ => null,
+            };
         }
     });
+
+    private (CalibrationStep, string, CalibrationResult?)? CompleteSweep(string tooSmallMessage)
+    {
+        _idleTimer.Stop();
+        long sweep = Math.Abs(Interlocked.Read(ref _accumX));
+        if (sweep < MinValidSweepCounts)
+        {
+            Step = CalibrationStep.Failed;
+            return (Step, tooSmallMessage, (CalibrationResult?)null);
+        }
+        Step = CalibrationStep.Completed;
+        return (Step, "Mark set. Calibration complete.", new CalibrationResult(sweep));
+    }
 
     public void Abort() => Raise(() =>
     {

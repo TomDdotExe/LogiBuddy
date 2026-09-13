@@ -43,6 +43,7 @@ public class RadioPipeline : IDisposable
     private float _volume = 1f;
     private float _stereoWidth = 1f;
     private float _vehicleGain = 1f; // not part of RadioProfile; runtime-only, toggled by the vehicle in/out feature.
+    private bool _outsideView; // not part of RadioProfile; runtime-only, toggled by the inside/outside view feature.
 
     public int BufferUnderrunCount { get; private set; }
     public event EventHandler<string>? Warning;
@@ -60,6 +61,68 @@ public class RadioPipeline : IDisposable
     /// by the vehicle in/out toggle. Never persisted; a new RadioPipeline
     /// instance always starts unmuted (1f). Safe to call from the UI thread.
     public void SetVehicleMuted(bool muted) => _vehicleGain = muted ? 0f : 1f;
+
+    /// Switches between the profile's normal (inside-cockpit) tone, source
+    /// position, and yaw range and their outside-view equivalents (muffled/
+    /// quieter/narrower tone, source collapsed to the pivot point, free 360°
+    /// pan instead of the cockpit's clamped range) — used by the inside/
+    /// outside view toggle. Never persisted; a new RadioPipeline instance
+    /// always starts inside (false). Safe to call from the UI thread.
+    public void SetOutsideView(bool outside)
+    {
+        _outsideView = outside;
+        _tracker.SetOutsideView(outside);
+        ApplyEffectiveTone();
+    }
+
+    /// Re-derives the low-pass/volume/stereo-width/source-position the audio
+    /// thread actually uses from the current profile and _outsideView.
+    /// Called after ApplyProfile's own (inside-only) assignment so a live
+    /// profile edit while outside doesn't accidentally snap back to the
+    /// inside values, and after SetOutsideView so a toggle takes effect
+    /// immediately.
+    // Reference distance (metres) at which OutsideSourceDistance applies no
+    // gain change — chosen to match RadioProfile's own default for that
+    // field, so an untouched profile's outside volume doesn't shift just
+    // from this feature existing. Neither spatializer models loudness
+    // falloff over distance on its own: azimuth is derived from the
+    // direction vector's angle alone (scale-invariant — see
+    // StereoPanSpatializer's atan2), and Steam Audio's binaural effect only
+    // uses the vector's magnitude for near-field cues within roughly a
+    // metre, not for level. Without this, the distance slider audibly does
+    // nothing across most of its range.
+    private const float OutsideDistanceReferenceMeters = 5f;
+    private const float MinOutsideDistanceGain = 0.15f;
+    private const float MaxOutsideDistanceGain = 1.5f;
+
+    private void ApplyEffectiveTone()
+    {
+        _effectChain.LowPassHz = _outsideView ? _profile.OutsideLowPassHz : _profile.LowPassHz;
+        _stereoWidth = Math.Clamp(_outsideView ? _profile.OutsideStereoWidth : _profile.StereoWidth, 0f, 4f);
+
+        if (_outsideView)
+        {
+            // Floor guards against the user dragging the slider to (or near)
+            // 0 — a near-zero distance is the degenerate direction-vector
+            // case SteamAudioSpatializer's own epsilon guard exists for, but
+            // it also (per real-world testing) collapses real HRTF rendering
+            // toward centred/mono well before hitting that exact edge case,
+            // since near-field handling reduces directional cues as distance
+            // shrinks. 0.5 m keeps a clear sweep even at the slider's floor.
+            float distance = Math.Max(_profile.OutsideSourceDistance, 0.5f);
+            _primarySpatializer.SetSourcePosition(0f, 0f, distance);
+            _fallbackSpatializer.SetSourcePosition(0f, 0f, distance);
+
+            float distanceGain = Math.Clamp(OutsideDistanceReferenceMeters / distance, MinOutsideDistanceGain, MaxOutsideDistanceGain);
+            _volume = Math.Clamp(_profile.OutsideVolume, 0f, 1f) * distanceGain;
+        }
+        else
+        {
+            _primarySpatializer.SetSourcePosition(_profile.SourceX, _profile.SourceY, _profile.SourceZ);
+            _fallbackSpatializer.SetSourcePosition(_profile.SourceX, _profile.SourceY, _profile.SourceZ);
+            _volume = Math.Clamp(_profile.Volume, 0f, 1f);
+        }
+    }
 
     public RadioPipeline(
         IAudioCaptureService capture,
@@ -101,10 +164,11 @@ public class RadioPipeline : IDisposable
         _profile = profile;
         _effectChain.ApplyProfile(profile);
         _tracker.ApplyProfile(profile);
-        _primarySpatializer.SetSourcePosition(profile.SourceX, profile.SourceY, profile.SourceZ);
-        _fallbackSpatializer.SetSourcePosition(profile.SourceX, profile.SourceY, profile.SourceZ);
-        _volume = Math.Clamp(profile.Volume, 0f, 1f);
-        _stereoWidth = Math.Clamp(profile.StereoWidth, 0f, 4f);
+        // _effectChain.ApplyProfile above just set LowPassHz to the inside
+        // value; this re-derives LowPassHz/Volume/StereoWidth/source-position
+        // from the current _outsideView so a live profile edit while outside
+        // doesn't snap back to the inside tone/position.
+        ApplyEffectiveTone();
     }
 
     public void Start()
