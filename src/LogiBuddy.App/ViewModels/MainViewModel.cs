@@ -57,11 +57,12 @@ public class MainViewModel : INotifyPropertyChanged
     private System.Windows.Threading.DispatcherTimer? _voiceOverlayHideTimer;
     private readonly VoiceCuePlayer _voiceCue;
 
-    // Name Profile was last loaded from or saved as, or null if it has never
-    // been persisted. Lets SaveProfile() detect a rename (Profile.Name typed
-    // to something new) and delete the stale file instead of leaving a
-    // duplicate behind.
-    private string? _loadedProfileName;
+    // Shared by every hotkey watcher (and Win32MouseHook's freelook hold-key
+    // poll) below, so suspending this one instance suspends all of them at
+    // once — see _chatModeHotkeyWatcher/_chatModeExitWatcher.
+    private readonly SuspendableKeyStateSource _keyStateGate = new(new Win32KeyStateSource());
+    private readonly TapHotkeyWatcher _chatModeHotkeyWatcher;
+    private readonly TapHotkeyWatcher _chatModeExitWatcher;
 
     private const string UpdateRepoOwner = "TomDdotExe";
     private const string UpdateRepoName = "LogiBuddy";
@@ -266,7 +267,7 @@ public class MainViewModel : INotifyPropertyChanged
             catch (Exception) { /* app is shutting down; nothing to report */ }
         };
 
-        _voiceRecordWatcher = new TapHotkeyWatcher(Profile.VoiceRecordHotkey, new Win32KeyStateSource());
+        _voiceRecordWatcher = new TapHotkeyWatcher(Profile.VoiceRecordHotkey, _keyStateGate);
         _voiceRecordWatcher.Pressed += () =>
         {
             try
@@ -282,6 +283,45 @@ public class MainViewModel : INotifyPropertyChanged
                 Application.Current?.Dispatcher.Invoke(() => _voiceSession?.EndRecording());
             }
             catch (Exception) { /* app is shutting down; nothing to record */ }
+        };
+
+        // Both built on their own raw (never-suspended) key state source —
+        // they're the switch, not something the switch should gate. Enter is
+        // hardcoded rather than rebindable: it's the one key every chat box
+        // already uses to confirm/send, so it always exits chat mode.
+        //
+        // Chat mode key toggles rather than only setting Suspended=true so a
+        // single key rebound both ways still works if it's ever stuck (e.g.
+        // Enter's own watcher below didn't fire). The exit watcher below
+        // skips entirely when ChatModeHotkey IS Enter (a common real choice —
+        // many games open AND send/close chat on the same key): with two
+        // independent watchers polling the same physical key, both would
+        // detect the same key-down edge and race to set Suspended, one
+        // immediately undoing what the other just did.
+        _chatModeHotkeyWatcher = new TapHotkeyWatcher(Profile.ChatModeHotkey, new Win32KeyStateSource());
+        _chatModeHotkeyWatcher.Pressed += () =>
+        {
+            _keyStateGate.Suspended = !_keyStateGate.Suspended;
+            string message = _keyStateGate.Suspended
+                ? "Chat mode: hotkeys suspended until Enter."
+                : "Chat mode: hotkeys active.";
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => StatusMessage = message);
+            }
+            catch (Exception) { /* app is shutting down; nothing to report */ }
+        };
+        _chatModeExitWatcher = new TapHotkeyWatcher(new FreelookHotkey { VirtualKeyCode = 0x0D }, new Win32KeyStateSource());
+        _chatModeExitWatcher.Pressed += () =>
+        {
+            if (Profile.ChatModeHotkey.VirtualKeyCode == 0x0D) return; // handled by the toggle above instead
+            if (!_keyStateGate.Suspended) return;
+            _keyStateGate.Suspended = false;
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() => StatusMessage = "Chat mode: hotkeys active.");
+            }
+            catch (Exception) { /* app is shutting down; nothing to report */ }
         };
 
         // Crash recovery runs during construction, i.e. while the window is
@@ -360,6 +400,10 @@ public class MainViewModel : INotifyPropertyChanged
         {
             _voiceRecordWatcher?.SetHotkey(Profile.VoiceRecordHotkey);
         }
+        else if (e.PropertyName == nameof(RadioProfile.ChatModeHotkey))
+        {
+            _chatModeHotkeyWatcher.SetHotkey(Profile.ChatModeHotkey);
+        }
         else if (e.PropertyName == nameof(RadioProfile.OutputDeviceId) && _pipeline is not null)
         {
             try
@@ -417,24 +461,20 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    /// Saves Profile under its current Name. If it was previously loaded or
-    /// saved under a different name (the name box was edited), this is a
-    /// rename: the stale file is deleted so the profile list doesn't end up
-    /// with a leftover duplicate under the old name.
+    /// Saves Profile under its current Name — always just a write to that
+    /// name's file, never touching any other profile. Editing the Name box
+    /// before saving therefore creates a new profile alongside the one it
+    /// was loaded from rather than renaming it; use the Delete button next
+    /// to the profile list to remove the old one if a rename was intended.
     private void SaveProfile()
     {
-        var previousName = _loadedProfileName;
         _configStore.Save(Profile);
-        if (previousName is not null && previousName != Profile.Name)
-            _configStore.Delete(previousName);
-        _loadedProfileName = Profile.Name;
         OnPropertyChanged(nameof(AvailableProfiles));
     }
 
     private void DeleteProfile(string name)
     {
         _configStore.Delete(name);
-        if (_loadedProfileName == name) _loadedProfileName = null;
         if (SelectedProfileName == name) SelectedProfileName = null;
         OnPropertyChanged(nameof(AvailableProfiles));
     }
@@ -449,7 +489,6 @@ public class MainViewModel : INotifyPropertyChanged
         Profile.PropertyChanged -= OnProfilePropertyChanged;
         Profile = _configStore.Load(name);
         Profile.PropertyChanged += OnProfilePropertyChanged;
-        _loadedProfileName = name;
         OnPropertyChanged(nameof(Profile));
 
         if (_pipeline is not null)
@@ -1004,6 +1043,12 @@ public class MainViewModel : INotifyPropertyChanged
 
     private void Start()
     {
+        // Unconditional: hotkeys must work the moment Start is pressed,
+        // regardless of whatever chat-mode state a previous session (or a
+        // rebind that fired while the new key was still physically held —
+        // TapHotkeyWatcher.SetHotkey does this deliberately) left behind.
+        _keyStateGate.Suspended = false;
+
         // The construction sequence below touches real hardware (audio
         // devices, the global mouse hook) and can fail for reasons outside
         // our control (e.g. no default render device). Guard the whole
@@ -1063,8 +1108,8 @@ public class MainViewModel : INotifyPropertyChanged
 
             var output = new WasapiAudioOutput();
             var effectChain = new RadioEffectChain(48000f);
-            mouseHook = new Win32MouseHook(Profile.Hotkey);
-            recenterHotkeyWatcher = new TapHotkeyWatcher(Profile.RecenterHotkey, new Win32KeyStateSource());
+            mouseHook = new Win32MouseHook(Profile.Hotkey, _keyStateGate);
+            recenterHotkeyWatcher = new TapHotkeyWatcher(Profile.RecenterHotkey, _keyStateGate);
             recenterHotkeyWatcher.Pressed += () =>
             {
                 // A Pressed event can still be in flight after Stop()/window-close
@@ -1080,7 +1125,7 @@ public class MainViewModel : INotifyPropertyChanged
                 catch (Exception) { /* app is shutting down; nothing to recenter */ }
             };
 
-            vehicleToggleHotkeyWatcher = new TapHotkeyWatcher(Profile.VehicleToggleHotkey, new Win32KeyStateSource());
+            vehicleToggleHotkeyWatcher = new TapHotkeyWatcher(Profile.VehicleToggleHotkey, _keyStateGate);
             vehicleToggleHotkeyWatcher.Pressed += () =>
             {
                 try
@@ -1098,7 +1143,7 @@ public class MainViewModel : INotifyPropertyChanged
                 catch (Exception) { /* app is shutting down; nothing to toggle */ }
             };
 
-            calibrateHotkeyWatcher = new TapHotkeyWatcher(Profile.CalibrateHotkey, new Win32KeyStateSource());
+            calibrateHotkeyWatcher = new TapHotkeyWatcher(Profile.CalibrateHotkey, _keyStateGate);
             calibrateHotkeyWatcher.Pressed += () =>
             {
                 try
@@ -1108,7 +1153,7 @@ public class MainViewModel : INotifyPropertyChanged
                 catch (Exception) { /* app is shutting down */ }
             };
 
-            outsideViewHotkeyWatcher = new TapHotkeyWatcher(Profile.OutsideViewHotkey, new Win32KeyStateSource());
+            outsideViewHotkeyWatcher = new TapHotkeyWatcher(Profile.OutsideViewHotkey, _keyStateGate);
             outsideViewHotkeyWatcher.Pressed += () =>
             {
                 try
@@ -1288,6 +1333,8 @@ public class MainViewModel : INotifyPropertyChanged
         _announcer.Dispose();
         _voiceCue.Dispose();
         _voiceRecordWatcher?.Dispose();
+        _chatModeHotkeyWatcher.Dispose();
+        _chatModeExitWatcher.Dispose();
         _voiceOverlayHideTimer?.Stop();
         _voiceSession?.Dispose();
         _speechToText?.Dispose();

@@ -42,6 +42,7 @@ public class RadioProfile : INotifyPropertyChanged
     private string _voiceCustomVocabulary = VoiceVocabularyDefaults.Starter;
     private string _voiceMicrophoneDeviceId = "";
     private FreelookHotkey _outsideViewHotkey = new() { VirtualKeyCode = 0 };
+    private FreelookHotkey _chatModeHotkey = new() { VirtualKeyCode = 0 };
     private float _outsideLowPassHz = 900f;
     private float _outsideVolume = 0.6f;
     private float _outsideStereoWidth = 0.4f;
@@ -181,6 +182,12 @@ public class RadioProfile : INotifyPropertyChanged
     /// means unbound. Runtime-only state — always starts back "inside" on
     /// the next Start(), same as the vehicle in/out toggle.
     public FreelookHotkey OutsideViewHotkey { get => _outsideViewHotkey; set => SetField(ref _outsideViewHotkey, value); }
+
+    /// Global hotkey that suspends every other LogiBuddy hotkey (and the
+    /// freelook hold-key) until Enter is pressed — for typing in an in-game
+    /// chat box without a bound letter firing a hotkey by accident.
+    /// VirtualKeyCode 0 means unbound (feature off).
+    public FreelookHotkey ChatModeHotkey { get => _chatModeHotkey; set => SetField(ref _chatModeHotkey, value); }
 
     /// Low-pass cutoff used instead of LowPassHz while in outside view — the
     /// main "how muffled" knob, since it's what most distinguishes hearing a

@@ -236,6 +236,17 @@
                             </Grid>
                             <TextBlock Text="Fires Recenter without alt-tabbing." Style="{StaticResource MutedText}" Margin="0,0,0,10" />
 
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Chat mode key" Style="{StaticResource RowLabelText}" />
+                                <controls:HotkeyCaptureControl Grid.Column="1" HorizontalAlignment="Left"
+                                    Hotkey="{Binding Profile.ChatModeHotkey, Mode=TwoWay}" />
+                            </Grid>
+                            <TextBlock Text="Suspends every LogiBuddy hotkey (and freelook) until Enter is pressed — bind it to whatever key your game/Discord uses to open chat, so typing a message can't accidentally fire a bound hotkey. Unbound by default." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
                             <Expander Header="Advanced" Margin="0,0,0,10">
                                 <StackPanel Margin="0,4,0,0">
                                     <TextBlock Text="Calibration sets these automatically — only touch them if you need to override it."

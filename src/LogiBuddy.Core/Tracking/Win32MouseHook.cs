@@ -137,11 +137,9 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
     private readonly WndProc _wndProc; // kept alive: native code holds a raw pointer to this delegate
     private volatile FreelookHotkey _hotkey;
+    private readonly IKeyStateSource _keyState;
     private readonly Thread _messageThread;
     private readonly Thread _hotkeyPollThread;
     private uint _messageThreadId;
@@ -157,9 +155,13 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
     /// Thrown if the raw input window/registration could not be created (e.g. blocked by policy/AV).
     public bool HookInstalled { get; private set; }
 
-    public Win32MouseHook(FreelookHotkey hotkey)
+    /// keyState lets the hold-hotkey poll be gated the same way TapHotkeyWatcher's
+    /// is (e.g. suspended while typing in an in-game chat box) — pass the same
+    /// shared SuspendableKeyStateSource instance used for the app's other hotkeys.
+    public Win32MouseHook(FreelookHotkey hotkey, IKeyStateSource keyState)
     {
         _hotkey = hotkey;
+        _keyState = keyState;
         _wndProc = WndProcCallback;
 
         _messageThread = new Thread(RunMessageLoop) { IsBackground = true, Name = "SGR-RawInput" };
@@ -245,8 +247,7 @@ public class Win32MouseHook : IMouseInputSource, IDisposable
     {
         while (_pollRunning)
         {
-            // High bit set = key currently down.
-            IsHotkeyHeld = (GetAsyncKeyState(_hotkey.VirtualKeyCode) & 0x8000) != 0;
+            IsHotkeyHeld = _hotkey.VirtualKeyCode != 0 && _keyState.IsKeyDown(_hotkey.VirtualKeyCode);
             Thread.Sleep(8); // ~120Hz poll
         }
     }

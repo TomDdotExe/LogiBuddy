@@ -125,4 +125,24 @@ public class RadioProfileTests
         Assert.Contains(nameof(RadioProfile.OutsideSourceDistance), changed);
         Assert.Contains(nameof(RadioProfile.OutsideYawSensitivity), changed);
     }
+
+    [Fact]
+    public void ChatModeHotkey_DefaultsUnbound()
+    {
+        var profile = new RadioProfile();
+
+        Assert.Equal(0, profile.ChatModeHotkey.VirtualKeyCode); // unbound
+    }
+
+    [Fact]
+    public void AssigningChatModeHotkey_RaisesPropertyChanged()
+    {
+        var profile = new RadioProfile();
+        var changed = new List<string?>();
+        profile.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        profile.ChatModeHotkey = new FreelookHotkey { VirtualKeyCode = 0x54 };
+
+        Assert.Contains(nameof(RadioProfile.ChatModeHotkey), changed);
+    }
 }
