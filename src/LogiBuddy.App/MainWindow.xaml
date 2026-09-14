@@ -163,6 +163,30 @@
 
                             <CheckBox Content="Auto-mute source audio on Start" IsChecked="{Binding Profile.AutoMuteSource}"
                                       ToolTip="Mutes the source app's own Windows audio session. WARNING: this also silences this app's own capture of that source, so the radio goes silent too — only enable this if you don't need the radio to actually play that source. Off by default; prefer 'Auto-route source to a silent device' above instead." />
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Override hotkey" Style="{StaticResource RowLabelText}" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <controls:HotkeyCaptureControl Hotkey="{Binding Profile.OverrideHotkey, Mode=TwoWay}" />
+                                    <Button Margin="8,0,0,0" Command="{Binding OverrideToggleCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Content" Value="Override" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsOverrideMuted}" Value="True">
+                                                        <Setter Property="Content" Value="Muted" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Instantly mutes/un-mutes the whole radio, independent of the Vehicle toggle above — both must be un-muted/in-vehicle to hear anything. No delay, and doesn't persist: always starts unmuted on Start." Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,4,0,0" />
                         </StackPanel>
                     </Border>
 
