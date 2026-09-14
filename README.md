@@ -57,6 +57,19 @@ any way — it only reads global mouse/keyboard input and captures audio via
 standard Windows APIs, the same way any other external overlay/macro tool
 does.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Tone shaping](Images/screenshot-tone-shaping.png) | ![Freelook](Images/screenshot-freelook.png) |
+| **Tone shaping** — high/low-pass, distortion, compressor, static, wet/dry mix, volume, and stereo width. | **Freelook** — freelook and recenter hotkeys, plus a chat-mode key that suspends every LogiBuddy hotkey while you're typing in-game. |
+| ![Spatial position](Images/screenshot-spatial-position.png) | ![Vehicle & auto-mute](Images/screenshot-vehicle-automute.png) |
+| **Spatial position** — drag-to-place source position, with outside-view orbit and pitch. | **Vehicle & auto-mute** — simulated in/out-of-vehicle toggle with configurable exit/reactivate delay. |
+| ![Perspective](Images/screenshot-perspective.png) | ![Voice chat](Images/screenshot-voice-chat.png) |
+| **Perspective** — inside/outside view toggle, with its own muffled tone and distance falloff for the third-person view. | **Voice chat** — push-to-record, locally-transcribed (Whisper) voice notes with a custom callsign/jargon vocabulary. |
+| ![Profiles](Images/screenshot-profiles.png) | ![Source & routing](Images/screenshot-source-routing.png) |
+| **Profiles** — save and load named setups. | **Source & routing** — pick the source app and auto-route it to a silent virtual cable. |
+
 ## Requirements
 
 - **Windows 10 20H1 (build 19041) or later** for per-process audio capture.
