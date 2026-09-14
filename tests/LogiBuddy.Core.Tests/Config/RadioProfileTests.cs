@@ -145,4 +145,24 @@ public class RadioProfileTests
 
         Assert.Contains(nameof(RadioProfile.ChatModeHotkey), changed);
     }
+
+    [Fact]
+    public void OverrideHotkey_DefaultsUnbound()
+    {
+        var profile = new RadioProfile();
+
+        Assert.Equal(0, profile.OverrideHotkey.VirtualKeyCode); // unbound
+    }
+
+    [Fact]
+    public void AssigningOverrideHotkey_RaisesPropertyChanged()
+    {
+        var profile = new RadioProfile();
+        var changed = new List<string?>();
+        profile.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        profile.OverrideHotkey = new FreelookHotkey { VirtualKeyCode = 0x58 };
+
+        Assert.Contains(nameof(RadioProfile.OverrideHotkey), changed);
+    }
 }

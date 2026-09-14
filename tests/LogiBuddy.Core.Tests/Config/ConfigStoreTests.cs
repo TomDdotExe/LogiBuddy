@@ -136,6 +136,7 @@ public class ConfigStoreTests
             Assert.Equal(LogiBuddy.Core.Speech.VoiceVocabularyDefaults.Starter, loaded.VoiceCustomVocabulary); // default retained
             Assert.Equal("", loaded.VoiceMicrophoneDeviceId);              // default retained
             Assert.Equal(0, loaded.OutsideViewHotkey.VirtualKeyCode);      // default retained (unbound)
+            Assert.Equal(0, loaded.OverrideHotkey.VirtualKeyCode);         // default retained (unbound)
             Assert.Equal(900f, loaded.OutsideLowPassHz);                   // default retained
             Assert.Equal(0.6f, loaded.OutsideVolume);                      // default retained
             Assert.Equal(0.4f, loaded.OutsideStereoWidth);                 // default retained

@@ -43,6 +43,7 @@ public class RadioProfile : INotifyPropertyChanged
     private string _voiceMicrophoneDeviceId = "";
     private FreelookHotkey _outsideViewHotkey = new() { VirtualKeyCode = 0 };
     private FreelookHotkey _chatModeHotkey = new() { VirtualKeyCode = 0 };
+    private FreelookHotkey _overrideHotkey = new() { VirtualKeyCode = 0 };
     private float _outsideLowPassHz = 900f;
     private float _outsideVolume = 0.6f;
     private float _outsideStereoWidth = 0.4f;
@@ -188,6 +189,14 @@ public class RadioProfile : INotifyPropertyChanged
     /// chat box without a bound letter firing a hotkey by accident.
     /// VirtualKeyCode 0 means unbound (feature off).
     public FreelookHotkey ChatModeHotkey { get => _chatModeHotkey; set => SetField(ref _chatModeHotkey, value); }
+
+    /// Global hotkey that instantly mutes/un-mutes the whole radio,
+    /// independent of the Vehicle in/out toggle — both must be "on" (not
+    /// muted / in vehicle) to hear anything. No delay, unlike the vehicle
+    /// toggle's exit/enter delay. VirtualKeyCode 0 means unbound (never
+    /// fires). Runtime-only mute state — always starts unmuted on the next
+    /// Start(), same as the vehicle in/out toggle.
+    public FreelookHotkey OverrideHotkey { get => _overrideHotkey; set => SetField(ref _overrideHotkey, value); }
 
     /// Low-pass cutoff used instead of LowPassHz while in outside view — the
     /// main "how muffled" knob, since it's what most distinguishes hearing a
