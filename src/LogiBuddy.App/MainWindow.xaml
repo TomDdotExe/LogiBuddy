@@ -180,6 +180,7 @@
                                                     <DataTrigger Binding="{Binding IsOverrideMuted}" Value="True">
                                                         <Setter Property="Content" Value="Muted" />
                                                         <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                                                        <Setter Property="Foreground" Value="#FF1A1D24" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
