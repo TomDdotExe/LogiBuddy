@@ -46,26 +46,53 @@ public class GitHubUpdateChecker : IUpdateChecker
 
         var notes = root.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "";
         var htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? "" : "";
-        var installerAssetUrl = FindInstallerAssetUrl(root);
-        return new UpdateInfo(tagName.TrimStart('v', 'V'), notes, htmlUrl, installerAssetUrl);
+        var (installerAssetUrl, installerAssetSha256) = FindInstallerAsset(root);
+        return new UpdateInfo(tagName.TrimStart('v', 'V'), notes, htmlUrl, installerAssetUrl, installerAssetSha256);
     }
 
-    /// Finds the download URL of the release asset produced by
-    /// build/make-installer.ps1 (OutputBaseFilename ends "-setup"), or null
-    /// if the release has no such asset (e.g. zip-only).
-    private static string? FindInstallerAssetUrl(JsonElement root)
+    /// Finds the release asset produced by build/make-installer.ps1
+    /// (OutputBaseFilename ends "-setup") and returns its download URL and
+    /// sha256 digest. Both come back null if there's no such asset (e.g.
+    /// zip-only release) or its browser_download_url fails IsTrustedAssetUrl
+    /// — this app is about to execute whatever that URL points to, so an
+    /// untrusted host or non-https URL is treated the same as "no asset
+    /// found" rather than passed through. The digest is separately dropped
+    /// (URL still returned) if it isn't sha256, since HttpUpdateDownloader
+    /// can only verify that algorithm.
+    private static (string? url, string? sha256) FindInstallerAsset(JsonElement root)
     {
-        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
+        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return (null, null);
 
         foreach (var asset in assets.EnumerateArray())
         {
             var name = asset.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
             if (name is null || !name.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase)) continue;
 
-            return asset.TryGetProperty("browser_download_url", out var urlProp) ? urlProp.GetString() : null;
+            var url = asset.TryGetProperty("browser_download_url", out var urlProp) ? urlProp.GetString() : null;
+            if (!IsTrustedAssetUrl(url)) return (null, null);
+
+            var digest = asset.TryGetProperty("digest", out var digestProp) ? digestProp.GetString() : null;
+            const string sha256Prefix = "sha256:";
+            var sha256 = digest is not null && digest.StartsWith(sha256Prefix, StringComparison.OrdinalIgnoreCase)
+                ? digest[sha256Prefix.Length..]
+                : null;
+
+            return (url, sha256);
         }
-        return null;
+        return (null, null);
     }
+
+    /// This app is about to download and silently execute whatever
+    /// browser_download_url points to — require it to actually be an
+    /// absolute https://github.com/... URL (the real, observed shape of a
+    /// GitHub release asset URL) rather than trusting the API response's
+    /// string verbatim, in case a malformed/tampered response ever points
+    /// elsewhere.
+    private static bool IsTrustedAssetUrl(string? url) =>
+        url is not null
+        && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase);
 
     /// True if latestTag (e.g. "v1.2.0" or "1.2.0") parses to a version
     /// strictly greater than currentVersion. Either side failing to parse is

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 
 namespace LogiBuddy.Core.Updates;
 
@@ -12,11 +13,12 @@ public class HttpUpdateDownloader : IUpdateDownloader
         _http = handler is null ? new HttpClient() : new HttpClient(handler);
     }
 
-    public async Task DownloadAsync(string url, string destinationPath, CancellationToken cancellationToken = default)
+    public async Task DownloadAsync(string url, string destinationPath, string? expectedSha256 = null, CancellationToken cancellationToken = default)
     {
         // Downloads to a temp file alongside the destination first, then
-        // moves it into place — a failed/cancelled download never leaves a
-        // partial or stale file sitting at destinationPath.
+        // moves it into place — a failed/cancelled/hash-mismatched download
+        // never leaves a partial or stale file sitting at destinationPath,
+        // and never overwrites a previously-good download there either.
         var tempPath = destinationPath + ".download";
         try
         {
@@ -29,6 +31,16 @@ public class HttpUpdateDownloader : IUpdateDownloader
                 await responseStream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
             }
 
+            if (expectedSha256 is not null)
+            {
+                var actualSha256 = await ComputeSha256Async(tempPath, cancellationToken).ConfigureAwait(false);
+                if (!actualSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"Downloaded file's SHA256 ({actualSha256}) did not match the published digest ({expectedSha256}).");
+                }
+            }
+
             File.Move(tempPath, destinationPath, overwrite: true);
         }
         catch
@@ -36,5 +48,12 @@ public class HttpUpdateDownloader : IUpdateDownloader
             if (File.Exists(tempPath)) File.Delete(tempPath);
             throw;
         }
+    }
+
+    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
+    {
+        await using var stream = File.OpenRead(path);
+        var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

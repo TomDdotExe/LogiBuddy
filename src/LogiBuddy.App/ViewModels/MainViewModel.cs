@@ -595,11 +595,20 @@ public class MainViewModel : INotifyPropertyChanged
     /// finishes.
     private async Task DownloadAndInstallAsync(UpdateInfo info)
     {
-        var installerPath = Path.Combine(Path.GetTempPath(), "LogiBuddy-update-setup.exe");
+        // A random name per attempt, in a directory this app owns, rather
+        // than a fixed name in the shared system temp root — a predictable
+        // path is a TOCTOU target (something else could plant or swap a file
+        // there in the gap between us placing the verified download and the
+        // delayed command below actually running it).
+        var updateDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LogiBuddy", "Updates");
+        Directory.CreateDirectory(updateDir);
+        CleanupStaleInstallers(updateDir);
+        var installerPath = Path.Combine(updateDir, $"LogiBuddy-update-{Guid.NewGuid():N}.exe");
+
         StatusMessage = $"Downloading update v{info.Version}...";
         try
         {
-            await _updateDownloader.DownloadAsync(info.InstallerAssetUrl!, installerPath);
+            await _updateDownloader.DownloadAsync(info.InstallerAssetUrl!, installerPath, info.InstallerAssetSha256);
         }
         catch (Exception ex)
         {
@@ -633,6 +642,20 @@ public class MainViewModel : INotifyPropertyChanged
         }
 
         Application.Current.Shutdown();
+    }
+
+    /// Best-effort cleanup of installers left behind by earlier update
+    /// attempts (declined installs, crashes before relaunch, etc.) — each
+    /// attempt gets its own GUID-named file, so nothing here is reused
+    /// across runs and this is purely tidiness, never load-bearing.
+    private static void CleanupStaleInstallers(string updateDir)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(updateDir, "LogiBuddy-update-*.exe"))
+                File.Delete(file);
+        }
+        catch { /* best effort; a leftover file or two is harmless */ }
     }
 
     /// Reads the version .csproj/package.ps1 stamp onto the assembly

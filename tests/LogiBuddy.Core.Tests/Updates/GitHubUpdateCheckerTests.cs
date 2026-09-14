@@ -39,8 +39,9 @@ public class GitHubUpdateCheckerTests
     private static string ReleaseJson(string tag, string body = "notes", string url = "https://github.com/x/y/releases/tag/v1", string? assetsJson = null) =>
         $$"""{ "tag_name": "{{tag}}", "body": "{{body}}", "html_url": "{{url}}"{{(assetsJson is null ? "" : $", \"assets\": {assetsJson}")}} }""";
 
-    private static string AssetsJson(params (string name, string url)[] assets) =>
-        "[" + string.Join(",", assets.Select(a => $$"""{ "name": "{{a.name}}", "browser_download_url": "{{a.url}}" }""")) + "]";
+    private static string AssetsJson(params (string name, string url, string? digest)[] assets) =>
+        "[" + string.Join(",", assets.Select(a =>
+            $$"""{ "name": "{{a.name}}", "browser_download_url": "{{a.url}}"{{(a.digest is null ? "" : $", \"digest\": \"{a.digest}\"")}} }""")) + "]";
 
     [Theory]
     [InlineData("0.4.0", "v0.5.0", true)]
@@ -109,24 +110,25 @@ public class GitHubUpdateCheckerTests
     }
 
     [Fact]
-    public async Task CheckForUpdateAsync_SetupExeAssetPresent_PopulatesInstallerAssetUrl()
+    public async Task CheckForUpdateAsync_SetupExeAssetPresent_PopulatesInstallerAssetUrlAndDigest()
     {
         var assets = AssetsJson(
-            ("LogiBuddy-v0.5.0-win-x64.zip", "https://example.com/zip"),
-            ("LogiBuddy-v0.5.0-win-x64-setup.exe", "https://example.com/setup.exe"));
+            ("LogiBuddy-v0.5.0-win-x64.zip", "https://github.com/x/y/releases/download/v0.5.0/LogiBuddy-v0.5.0-win-x64.zip", "sha256:zip"),
+            ("LogiBuddy-v0.5.0-win-x64-setup.exe", "https://github.com/x/y/releases/download/v0.5.0/LogiBuddy-v0.5.0-win-x64-setup.exe", "sha256:abc123"));
         var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
         var checker = new GitHubUpdateChecker("x", "y", handler);
 
         var result = await checker.CheckForUpdateAsync("0.4.0");
 
         Assert.NotNull(result);
-        Assert.Equal("https://example.com/setup.exe", result!.InstallerAssetUrl);
+        Assert.Equal("https://github.com/x/y/releases/download/v0.5.0/LogiBuddy-v0.5.0-win-x64-setup.exe", result!.InstallerAssetUrl);
+        Assert.Equal("abc123", result.InstallerAssetSha256);
     }
 
     [Fact]
     public async Task CheckForUpdateAsync_NoSetupExeAsset_InstallerAssetUrlIsNull()
     {
-        var assets = AssetsJson(("LogiBuddy-v0.5.0-win-x64.zip", "https://example.com/zip"));
+        var assets = AssetsJson(("LogiBuddy-v0.5.0-win-x64.zip", "https://github.com/x/y/releases/download/v0.5.0/LogiBuddy-v0.5.0-win-x64.zip", null));
         var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
         var checker = new GitHubUpdateChecker("x", "y", handler);
 
@@ -146,6 +148,39 @@ public class GitHubUpdateCheckerTests
 
         Assert.NotNull(result);
         Assert.Null(result!.InstallerAssetUrl);
+    }
+
+    [Theory]
+    [InlineData("http://github.com/x/y/releases/download/v0.5.0/setup.exe")] // not https
+    [InlineData("https://evil.example.com/x/y/releases/download/v0.5.0/setup.exe")] // not github.com
+    [InlineData("https://github.com.evil.com/setup.exe")] // lookalike host, not an actual github.com subdomain match
+    [InlineData("not a url at all")]
+    public async Task CheckForUpdateAsync_AssetUrlNotHttpsGithub_IsRejected(string spoofedUrl)
+    {
+        var assets = AssetsJson(("LogiBuddy-v0.5.0-win-x64-setup.exe", spoofedUrl, "sha256:abc123"));
+        var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
+        var checker = new GitHubUpdateChecker("x", "y", handler);
+
+        var result = await checker.CheckForUpdateAsync("0.4.0");
+
+        Assert.NotNull(result);
+        Assert.Null(result!.InstallerAssetUrl);
+        Assert.Null(result.InstallerAssetSha256);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_DigestNotSha256Prefixed_IsIgnored()
+    {
+        var assets = AssetsJson(("LogiBuddy-v0.5.0-win-x64-setup.exe",
+            "https://github.com/x/y/releases/download/v0.5.0/setup.exe", "md5:abc123"));
+        var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
+        var checker = new GitHubUpdateChecker("x", "y", handler);
+
+        var result = await checker.CheckForUpdateAsync("0.4.0");
+
+        Assert.NotNull(result);
+        Assert.NotNull(result!.InstallerAssetUrl); // URL is still valid and usable
+        Assert.Null(result.InstallerAssetSha256); // but the unverifiable digest is dropped, not trusted blindly
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using LogiBuddy.Core.Updates;
 using Xunit;
@@ -54,6 +55,70 @@ public class HttpUpdateDownloaderTests
             await downloader.DownloadAsync("https://example.com/setup.exe", dest);
 
             Assert.Equal("new bytes", await File.ReadAllTextAsync(dest));
+        }
+        finally
+        {
+            if (File.Exists(dest)) File.Delete(dest);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadAsync_MatchingSha256_SucceedsAndWritesFile()
+    {
+        var bytes = Encoding.UTF8.GetBytes("fake installer bytes");
+        var expectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        var handler = new FakeHandler(HttpStatusCode.OK, bytes);
+        var downloader = new HttpUpdateDownloader(handler);
+        var dest = Path.Combine(Path.GetTempPath(), "HttpUpdateDownloaderTests_" + Guid.NewGuid() + ".exe");
+
+        try
+        {
+            await downloader.DownloadAsync("https://example.com/setup.exe", dest, expectedSha256);
+
+            Assert.True(File.Exists(dest));
+        }
+        finally
+        {
+            if (File.Exists(dest)) File.Delete(dest);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadAsync_MismatchedSha256_ThrowsAndLeavesNoFileAtDestination()
+    {
+        var bytes = Encoding.UTF8.GetBytes("fake installer bytes");
+        var wrongSha256 = new string('0', 64);
+        var handler = new FakeHandler(HttpStatusCode.OK, bytes);
+        var downloader = new HttpUpdateDownloader(handler);
+        var dest = Path.Combine(Path.GetTempPath(), "HttpUpdateDownloaderTests_" + Guid.NewGuid() + ".exe");
+
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => downloader.DownloadAsync("https://example.com/setup.exe", dest, wrongSha256));
+
+            Assert.False(File.Exists(dest));
+        }
+        finally
+        {
+            if (File.Exists(dest)) File.Delete(dest);
+        }
+    }
+
+    [Fact]
+    public async Task DownloadAsync_MismatchedSha256_DoesNotOverwriteExistingDestination()
+    {
+        var dest = Path.Combine(Path.GetTempPath(), "HttpUpdateDownloaderTests_" + Guid.NewGuid() + ".exe");
+        await File.WriteAllTextAsync(dest, "previous good download, must survive a failed verification");
+        var handler = new FakeHandler(HttpStatusCode.OK, Encoding.UTF8.GetBytes("tampered bytes"));
+        var downloader = new HttpUpdateDownloader(handler);
+
+        try
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => downloader.DownloadAsync("https://example.com/setup.exe", dest, new string('0', 64)));
+
+            Assert.Equal("previous good download, must survive a failed verification", await File.ReadAllTextAsync(dest));
         }
         finally
         {
