@@ -43,6 +43,7 @@ public class RadioPipeline : IDisposable
     private float _volume = 1f;
     private float _stereoWidth = 1f;
     private float _vehicleGain = 1f; // not part of RadioProfile; runtime-only, toggled by the vehicle in/out feature.
+    private float _overrideGain = 1f; // not part of RadioProfile; runtime-only, toggled by the override mute feature.
     private bool _outsideView; // not part of RadioProfile; runtime-only, toggled by the inside/outside view feature.
 
     public int BufferUnderrunCount { get; private set; }
@@ -61,6 +62,12 @@ public class RadioPipeline : IDisposable
     /// by the vehicle in/out toggle. Never persisted; a new RadioPipeline
     /// instance always starts unmuted (1f). Safe to call from the UI thread.
     public void SetVehicleMuted(bool muted) => _vehicleGain = muted ? 0f : 1f;
+
+    /// Mutes/unmutes the processed output independent of Profile.Volume and
+    /// SetVehicleMuted — used by the override mute button/hotkey. Never
+    /// persisted; a new RadioPipeline instance always starts unmuted (1f).
+    /// Safe to call from the UI thread.
+    public void SetOverrideMuted(bool muted) => _overrideGain = muted ? 0f : 1f;
 
     /// Switches between the profile's normal (inside-cockpit) tone, source
     /// position, and yaw range and their outside-view equivalents (muffled/
@@ -223,7 +230,7 @@ public class RadioPipeline : IDisposable
                 // Post-spatializer output stage: width first, then master gain,
                 // so the volume fader also tames any width-induced level rise.
                 StereoWidth.Apply(_stereoBlock, _frameSize, _stereoWidth);
-                float gain = _volume * _vehicleGain;
+                float gain = _volume * _vehicleGain * _overrideGain;
                 if (gain != 1f)
                     for (int s = 0; s < _frameSize * 2; s++)
                         _stereoBlock[s] *= gain;

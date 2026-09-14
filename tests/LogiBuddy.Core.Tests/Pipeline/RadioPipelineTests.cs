@@ -284,6 +284,63 @@ public class RadioPipelineTests
     }
 
     [Fact]
+    public void SetOverrideMuted_True_SilencesOutputRegardlessOfVolume()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+
+        pipeline.SetOverrideMuted(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOverrideMuted_ComposesWithVolume_NotReplacesIt()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+        var profile = new RadioProfile { WetDryMix = 0f, Volume = 0.5f };
+        pipeline.ApplyProfile(profile);
+
+        pipeline.SetOverrideMuted(true);
+        pipeline.SetOverrideMuted(false);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+
+        Assert.All(output.WrittenBuffers[0], v => Assert.Equal(0.5f, v, precision: 5));
+    }
+
+    [Fact]
+    public void SetOverrideMuted_IsIndependentOfSetVehicleMuted()
+    {
+        var capture = new FakeCaptureService();
+        var output = new FakeOutputService();
+        var pipeline = BuildPipeline(capture, output, out _, frameSize: 3);
+        pipeline.Start();
+
+        // Vehicle unmuted, Override muted -> still silent.
+        pipeline.SetVehicleMuted(false);
+        pipeline.SetOverrideMuted(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(0f, v, precision: 5));
+
+        // Un-muting Override while Vehicle is still muted -> still silent.
+        pipeline.SetVehicleMuted(true);
+        pipeline.SetOverrideMuted(false);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(0f, v, precision: 5));
+
+        // Both unmuted -> audible again.
+        pipeline.SetVehicleMuted(false);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(1f, v, precision: 5));
+    }
+
+    [Fact]
     public void ListenerYaw_ReflectsTheTrackerAfterFreelookInput_PitchStaysZero()
     {
         var capture = new FakeCaptureService();
