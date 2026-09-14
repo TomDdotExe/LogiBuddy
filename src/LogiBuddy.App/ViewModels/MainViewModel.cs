@@ -29,6 +29,7 @@ public class MainViewModel : INotifyPropertyChanged
     private string? _mutedProcessName;
     private TapHotkeyWatcher? _recenterHotkeyWatcher;
     private TapHotkeyWatcher? _vehicleToggleHotkeyWatcher;
+    private TapHotkeyWatcher? _overrideHotkeyWatcher;
     private bool _isInVehicle = true;
     private TapHotkeyWatcher? _outsideViewHotkeyWatcher;
     private bool _isOutsideView;
@@ -38,6 +39,14 @@ public class MainViewModel : INotifyPropertyChanged
     {
         get => _isOutsideView;
         private set { _isOutsideView = value; OnPropertyChanged(); }
+    }
+    private bool _isOverrideMuted;
+    /// Bound by the Override button's Style DataTrigger and drives
+    /// RadioPipeline.SetOverrideMuted via OnOverrideTogglePressed.
+    public bool IsOverrideMuted
+    {
+        get => _isOverrideMuted;
+        private set { _isOverrideMuted = value; OnPropertyChanged(); }
     }
     private System.Windows.Threading.DispatcherTimer? _vehicleTransitionTimer;
     // The direction currently being requested — distinct from _isInVehicle,
@@ -201,6 +210,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand CalibrateFreelookCommand { get; }
     public ICommand CheckForUpdatesCommand { get; }
     public ICommand OutsideViewToggleCommand { get; }
+    public ICommand OverrideToggleCommand { get; }
 
     public MainViewModel()
     {
@@ -231,6 +241,7 @@ public class MainViewModel : INotifyPropertyChanged
         DownloadVoiceModelCommand = new RelayCommand(_ => _ = DownloadVoiceModelAsync(), _ => !VoiceModelDownloading);
         CheckForUpdatesCommand = new RelayCommand(_ => _ = CheckForUpdatesAsync(manual: true));
         OutsideViewToggleCommand = new RelayCommand(_ => OnOutsideViewTogglePressed(), _ => _pipeline is not null);
+        OverrideToggleCommand = new RelayCommand(_ => OnOverrideTogglePressed(), _ => _pipeline is not null);
         _announcer = new CalibrationAnnouncer(() => Profile.OutputDeviceId);
         _voiceCue = new VoiceCuePlayer(() => Profile.OutputDeviceId);
 
@@ -397,6 +408,10 @@ public class MainViewModel : INotifyPropertyChanged
         else if (e.PropertyName == nameof(RadioProfile.OutsideViewHotkey))
         {
             _outsideViewHotkeyWatcher?.SetHotkey(Profile.OutsideViewHotkey);
+        }
+        else if (e.PropertyName == nameof(RadioProfile.OverrideHotkey))
+        {
+            _overrideHotkeyWatcher?.SetHotkey(Profile.OverrideHotkey);
         }
         else if (e.PropertyName == nameof(RadioProfile.VoiceRecordHotkey))
         {
@@ -938,6 +953,16 @@ public class MainViewModel : INotifyPropertyChanged
         StatusMessage = _isOutsideView ? "Outside view" : "Inside cockpit";
     }
 
+    /// Fires on the override hotkey's tap (and the window button, via the
+    /// same handler). Instantly mutes/un-mutes the whole radio, independent
+    /// of the Vehicle in/out toggle — no delay, no in-vehicle gate.
+    private void OnOverrideTogglePressed()
+    {
+        IsOverrideMuted = !IsOverrideMuted;
+        _pipeline?.SetOverrideMuted(IsOverrideMuted);
+        StatusMessage = IsOverrideMuted ? "Radio muted (override)" : "Radio unmuted (override)";
+    }
+
     private void OnVoiceRecordPressed()
     {
         if (!_voiceModelStore.IsDownloaded)
@@ -1164,6 +1189,7 @@ public class MainViewModel : INotifyPropertyChanged
         TapHotkeyWatcher? vehicleToggleHotkeyWatcher = null;
         TapHotkeyWatcher? calibrateHotkeyWatcher = null;
         TapHotkeyWatcher? outsideViewHotkeyWatcher = null;
+        TapHotkeyWatcher? overrideHotkeyWatcher = null;
         try
         {
             // Per-process loopback (WasapiProcessLoopbackCapture) requires Windows 10
@@ -1255,6 +1281,17 @@ public class MainViewModel : INotifyPropertyChanged
                 }
                 catch (Exception) { /* app is shutting down; nothing to toggle */ }
             };
+
+            overrideHotkeyWatcher = new TapHotkeyWatcher(Profile.OverrideHotkey, _keyStateGate);
+            overrideHotkeyWatcher.Pressed += () =>
+            {
+                try
+                {
+                    Application.Current?.Dispatcher.Invoke(OnOverrideTogglePressed);
+                }
+                catch (Exception) { /* app is shutting down; nothing to toggle */ }
+            };
+
             var tracker = new FreelookTracker(mouseHook, Profile);
 
             ISpatializer fallback = new StereoPanSpatializer();
@@ -1284,6 +1321,7 @@ public class MainViewModel : INotifyPropertyChanged
             // rather than requiring a hotkey press every launch.
             IsOutsideView = true;
             pipeline.SetOutsideView(true);
+            IsOverrideMuted = false;
             // Skip auto-mute entirely when routing is also active: routing already
             // hides the raw source (by moving its output to a silent device) without
             // touching Mute, so it doesn't collide with this app's own loopback
@@ -1308,6 +1346,7 @@ public class MainViewModel : INotifyPropertyChanged
             _vehicleToggleHotkeyWatcher = vehicleToggleHotkeyWatcher;
             _calibrateHotkeyWatcher = calibrateHotkeyWatcher;
             _outsideViewHotkeyWatcher = outsideViewHotkeyWatcher;
+            _overrideHotkeyWatcher = overrideHotkeyWatcher;
 
             // The hook installs on a background thread; give it a moment, then
             // warn if it failed (spec requires freelook-disabled to be visible).
@@ -1354,6 +1393,7 @@ public class MainViewModel : INotifyPropertyChanged
             vehicleToggleHotkeyWatcher?.Dispose();
             calibrateHotkeyWatcher?.Dispose();
             outsideViewHotkeyWatcher?.Dispose();
+            overrideHotkeyWatcher?.Dispose();
             _pipeline = null;
             _mouseHook = null;
             _recenterHotkeyWatcher = null;
@@ -1392,11 +1432,14 @@ public class MainViewModel : INotifyPropertyChanged
         _vehicleToggleHotkeyWatcher?.Dispose();
         _calibrateHotkeyWatcher?.Dispose();
         _outsideViewHotkeyWatcher?.Dispose();
+        _overrideHotkeyWatcher?.Dispose();
         _recenterHotkeyWatcher = null;
         _vehicleToggleHotkeyWatcher = null;
         _calibrateHotkeyWatcher = null;
         _outsideViewHotkeyWatcher = null;
+        _overrideHotkeyWatcher = null;
         IsOutsideView = false;
+        IsOverrideMuted = false;
         if (_mutedProcessName is not null)
         {
             _sessionMuter.Unmute(_mutedProcessName);
