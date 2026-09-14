@@ -37,6 +37,9 @@ it's actually in the vehicle with you.
 - **Vehicle toggle** — simulates getting in/out of a vehicle: tap (or hold)
   a hotkey to mute/un-mute the radio after a configurable delay, matching
   games that play an exit/enter-vehicle animation.
+- **Override mute** — a button or rebindable hotkey that instantly mutes/
+  un-mutes the whole radio, no delay. Independent of the Vehicle toggle
+  above: both must be un-muted/in-vehicle to hear anything.
 - **Source routing** — routes the source app's own Windows audio output to
   a silent virtual device while running, so you hear only the processed
   radio and not the raw source playing underneath it. This isn't optional

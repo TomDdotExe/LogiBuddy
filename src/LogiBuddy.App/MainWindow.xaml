@@ -174,11 +174,12 @@
                                     <controls:HotkeyCaptureControl Hotkey="{Binding Profile.OverrideHotkey, Mode=TwoWay}" />
                                     <Button Margin="8,0,0,0" Command="{Binding OverrideToggleCommand}">
                                         <Button.Style>
-                                            <Style TargetType="Button">
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Content" Value="Override" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsOverrideMuted}" Value="True">
                                                         <Setter Property="Content" Value="Muted" />
+                                                        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

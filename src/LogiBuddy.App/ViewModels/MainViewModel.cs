@@ -1323,6 +1323,7 @@ public class MainViewModel : INotifyPropertyChanged
             IsOutsideView = true;
             pipeline.SetOutsideView(true);
             IsOverrideMuted = false;
+            pipeline.SetOverrideMuted(false);
             // Skip auto-mute entirely when routing is also active: routing already
             // hides the raw source (by moving its output to a silent device) without
             // touching Mute, so it doesn't collide with this app's own loopback

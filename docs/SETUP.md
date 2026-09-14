@@ -48,12 +48,14 @@
    Mouse Sensitivity / Max Yaw / Max Pitch to roughly match your
    in-game sensitivity and freelook angle limits — this is an
    approximation, not a memory read, so expect to tune it by ear.
-5. Optionally set a Recenter hotkey and a Vehicle toggle hotkey (both unbound
-   by default) in the window — Recenter snaps the listener back to forward
-   without alt-tabbing out of the game; the vehicle toggle simulates getting
-   in/out of a vehicle, muting the radio (not the source) after a
-   configurable delay so it matches games with an exit-vehicle animation
-   (e.g. Squad). Both work while the game has keyboard focus.
+5. Optionally set a Recenter hotkey, a Vehicle toggle hotkey, and an Override
+   hotkey (all unbound by default) in the window — Recenter snaps the
+   listener back to forward without alt-tabbing out of the game; the vehicle
+   toggle simulates getting in/out of a vehicle, muting the radio (not the
+   source) after a configurable delay so it matches games with an
+   exit-vehicle animation (e.g. Squad); the Override hotkey (or its button)
+   instantly mutes/un-mutes the whole radio with no delay, independent of
+   the vehicle toggle. All three work while the game has keyboard focus.
 6. Click Start, then hold your freelook key and look around in-game —
    the radio audio should shift as if it were mounted in the vehicle.
 7. Click Save Profile to keep these settings for next time.
