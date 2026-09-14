@@ -2,18 +2,18 @@
 
 # LogiBuddy
 
-LogiBuddy turns any audio source on your PC — Spotify, a browser tab, Discord,
-whatever — into an immersive, spatialized in-vehicle radio for sim and milsim
-games. It captures the source's audio, runs it through a filter chain that
-makes it sound like a tinny in-cabin radio, and places it at a fixed point in
-3D space. When you free-look in-game (holding a hotkey and moving the mouse),
-the audio image rotates the way a real, fixed radio would — the sound gets
-quieter and shifts behind you as you turn away from it, just like it would if
-there were an actual speaker mounted on the dash.
+**Turn any audio source on your PC into a spatialized in-vehicle radio for
+sim and milsim games.**
 
-Built for games like Arma, where "radio chatter" or music playing flat over
-the top of the game audio breaks immersion, and a real in-vehicle radio
-feeling is worth the setup effort.
+Point LogiBuddy at Spotify, a browser tab, Discord — anything — and it
+filters the audio to sound like a tinny in-cabin radio, then places it at a
+fixed point in 3D space. Free-look in-game (hold a hotkey and move the
+mouse) and the sound rotates, quietens, and shifts behind you exactly like
+it would if a real speaker were bolted to the dash.
+
+Built for games like Arma, where radio chatter or music playing flat over
+the top of the game audio breaks immersion — LogiBuddy makes it feel like
+it's actually in the vehicle with you.
 
 ## How it works
 
@@ -30,21 +30,18 @@ feeling is worth the setup effort.
   The source sits at a point you place on-screen; a separate "outside view"
   mode orbits the listener around a centred source with its own tuning
   (low-pass, volume, width, distance) for a third-person vehicle view.
-- **Freelook tracking** — while you hold a hotkey and move the mouse, raw
-  mouse deltas are used to estimate your in-game look angle and rotate the
-  audio image to match. This is an approximation tuned by a short
-  calibration step, not a memory read — LogiBuddy never touches the game
-  process. It's an external, input-hook-based tool, the same risk class as
-  AutoHotkey or a voice-chat push-to-talk utility, not a memory-reading or
-  injection-based tool.
+- **Freelook tracking** — hold a hotkey and move the mouse, and raw mouse
+  deltas estimate your in-game look angle to rotate the audio image to
+  match. It's an approximation tuned by a short calibration step, not a
+  read of the game's memory.
 - **Vehicle toggle** — simulates getting in/out of a vehicle: tap (or hold)
   a hotkey to mute/un-mute the radio after a configurable delay, matching
   games that play an exit/enter-vehicle animation.
 - **Source routing** — routes the source app's own Windows audio output to
   a silent virtual device while running, so you hear only the processed
-  radio and not the raw source playing underneath it. This is not a nice-to-have:
-  without it, you hear both the unprocessed source and the processed radio
-  overlapping at once, which defeats the entire effect (see
+  radio and not the raw source playing underneath it. This isn't optional
+  polish: without it you'd hear the unprocessed source and the processed
+  radio overlapping at once, which defeats the entire effect (see
   [Requirements](#requirements)).
 - **Voice chat transcription** — hold a hotkey to record from your
   microphone, release to transcribe locally (Whisper) and copy the result
@@ -53,9 +50,10 @@ feeling is worth the setup effort.
 - **Profiles** — save and load named sets of all the above.
 
 None of this reads game memory, injects into a process, or hooks a game in
-any way — it only reads global mouse/keyboard input and captures audio via
-standard Windows APIs, the same way any other external overlay/macro tool
-does.
+any way — LogiBuddy only reads global mouse/keyboard input and captures
+audio via standard Windows APIs, the same risk class as AutoHotkey or a
+voice-chat push-to-talk utility, not memory-reading or injection-based
+software.
 
 ## Screenshots
 
@@ -84,15 +82,15 @@ does.
     [Building from source](#building-from-source) below).
   - Without it, LogiBuddy still runs, just with simple stereo panning
     instead of true HRTF.
-- **A virtual audio cable (VB-Audio Virtual Cable, VoiceMeeter, etc.) — required
-  for the intended experience, not optional.** Without one, you hear the raw
-  source *and* the processed radio playing at once, overlapping — muting the
-  source instead is not a workaround, since LogiBuddy captures that same
-  session, so muting it also silences the radio. A virtual cable gives the
-  source somewhere silent to go instead.
-  - LogiBuddy's own "auto-route source to a silent device" automates picking
-    the cable and routing to it, but that automation needs **Windows 11**
-    (an undocumented API not available on Windows 10).
+- **A virtual audio cable** (VB-Audio Virtual Cable, VoiceMeeter, etc.) —
+  required for the intended experience, not optional. Without one, you hear
+  the raw source *and* the processed radio playing at once, overlapping;
+  muting the source isn't a workaround either, since LogiBuddy captures
+  that same session and muting it would silence the radio too. A virtual
+  cable gives the source somewhere silent to go instead.
+  - LogiBuddy's own "auto-route source to a silent device" automates
+    picking the cable and routing to it, but that automation needs
+    **Windows 11** (an undocumented API not available on Windows 10).
   - On Windows 10, route the source manually instead: Windows Settings →
     System → Sound → "App volume and device preferences" → set the source
     app's output to the virtual cable. One-time setup, works every launch.
