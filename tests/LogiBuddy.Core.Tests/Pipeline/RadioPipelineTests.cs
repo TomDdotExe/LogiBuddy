@@ -334,8 +334,14 @@ public class RadioPipelineTests
         capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
         Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(0f, v, precision: 5));
 
+        // Both muted -> silent.
+        pipeline.SetOverrideMuted(true);
+        capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
+        Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(0f, v, precision: 5));
+
         // Both unmuted -> audible again.
         pipeline.SetVehicleMuted(false);
+        pipeline.SetOverrideMuted(false);
         capture.PushSamples(new[] { 1.0f, 1.0f, 1.0f });
         Assert.All(output.WrittenBuffers[^1], v => Assert.Equal(1f, v, precision: 5));
     }
