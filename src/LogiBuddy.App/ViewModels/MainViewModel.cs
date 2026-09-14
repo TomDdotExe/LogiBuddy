@@ -519,6 +519,7 @@ public class MainViewModel : INotifyPropertyChanged
                 _vehicleToggleHotkeyWatcher?.SetHotkey(Profile.VehicleToggleHotkey);
                 _calibrateHotkeyWatcher?.SetHotkey(Profile.CalibrateHotkey);
                 _outsideViewHotkeyWatcher?.SetHotkey(Profile.OutsideViewHotkey);
+                _overrideHotkeyWatcher?.SetHotkey(Profile.OverrideHotkey);
             }
             catch (Exception ex) { StatusMessage = $"Couldn't apply loaded profile: {ex.Message}"; }
             // Source process and routing still need a manual Stop/Start.
