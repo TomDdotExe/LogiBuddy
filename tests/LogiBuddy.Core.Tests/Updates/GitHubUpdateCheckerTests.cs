@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -35,8 +36,11 @@ public class GitHubUpdateCheckerTests
             => throw new HttpRequestException("offline");
     }
 
-    private static string ReleaseJson(string tag, string body = "notes", string url = "https://github.com/x/y/releases/tag/v1") =>
-        $$"""{ "tag_name": "{{tag}}", "body": "{{body}}", "html_url": "{{url}}" }""";
+    private static string ReleaseJson(string tag, string body = "notes", string url = "https://github.com/x/y/releases/tag/v1", string? assetsJson = null) =>
+        $$"""{ "tag_name": "{{tag}}", "body": "{{body}}", "html_url": "{{url}}"{{(assetsJson is null ? "" : $", \"assets\": {assetsJson}")}} }""";
+
+    private static string AssetsJson(params (string name, string url)[] assets) =>
+        "[" + string.Join(",", assets.Select(a => $$"""{ "name": "{{a.name}}", "browser_download_url": "{{a.url}}" }""")) + "]";
 
     [Theory]
     [InlineData("0.4.0", "v0.5.0", true)]
@@ -102,6 +106,46 @@ public class GitHubUpdateCheckerTests
         var checker = new GitHubUpdateChecker("x", "y", handler);
 
         await Assert.ThrowsAsync<HttpRequestException>(() => checker.CheckForUpdateAsync("0.4.0"));
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_SetupExeAssetPresent_PopulatesInstallerAssetUrl()
+    {
+        var assets = AssetsJson(
+            ("LogiBuddy-v0.5.0-win-x64.zip", "https://example.com/zip"),
+            ("LogiBuddy-v0.5.0-win-x64-setup.exe", "https://example.com/setup.exe"));
+        var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
+        var checker = new GitHubUpdateChecker("x", "y", handler);
+
+        var result = await checker.CheckForUpdateAsync("0.4.0");
+
+        Assert.NotNull(result);
+        Assert.Equal("https://example.com/setup.exe", result!.InstallerAssetUrl);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_NoSetupExeAsset_InstallerAssetUrlIsNull()
+    {
+        var assets = AssetsJson(("LogiBuddy-v0.5.0-win-x64.zip", "https://example.com/zip"));
+        var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0", assetsJson: assets));
+        var checker = new GitHubUpdateChecker("x", "y", handler);
+
+        var result = await checker.CheckForUpdateAsync("0.4.0");
+
+        Assert.NotNull(result);
+        Assert.Null(result!.InstallerAssetUrl);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_NoAssetsField_InstallerAssetUrlIsNull()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, ReleaseJson("v0.5.0"));
+        var checker = new GitHubUpdateChecker("x", "y", handler);
+
+        var result = await checker.CheckForUpdateAsync("0.4.0");
+
+        Assert.NotNull(result);
+        Assert.Null(result!.InstallerAssetUrl);
     }
 
     [Fact]

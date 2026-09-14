@@ -52,4 +52,8 @@ Name: "{group}\Uninstall LogiBuddy"; Filename: "{uninstallexe}"
 Name: "{userdesktop}\LogiBuddy"; Filename: "{app}\LogiBuddy.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\LogiBuddy.exe"; Description: "Launch LogiBuddy"; Flags: nowait postinstall skipifsilent
+; No skipifsilent: in-app auto-update runs this installer with /VERYSILENT
+; and relies on this relaunching the app afterward (see MainViewModel's
+; update flow) — a normal interactive install still shows this as the usual
+; "Launch LogiBuddy" checkbox via the postinstall flag.
+Filename: "{app}\LogiBuddy.exe"; Description: "Launch LogiBuddy"; Flags: nowait postinstall

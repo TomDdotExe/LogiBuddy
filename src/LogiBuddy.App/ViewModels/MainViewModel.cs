@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -67,6 +68,7 @@ public class MainViewModel : INotifyPropertyChanged
     private const string UpdateRepoOwner = "TomDdotExe";
     private const string UpdateRepoName = "LogiBuddy";
     private readonly IUpdateChecker _updateChecker = new GitHubUpdateChecker(UpdateRepoOwner, UpdateRepoName);
+    private readonly IUpdateDownloader _updateDownloader = new HttpUpdateDownloader();
     private UpdateInfo? _pendingUpdate;
 
     private static readonly HashSet<string> LiveProfileProperties = new()
@@ -529,7 +531,7 @@ public class MainViewModel : INotifyPropertyChanged
             if (info is not null)
             {
                 UpdateAvailableMessage = $"Update available: v{info.Version}";
-                if (manual) ShowUpdateAvailableDialog(info);
+                if (manual) await TryUpdateAsync(info);
             }
             else
             {
@@ -551,18 +553,86 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    private static void ShowUpdateAvailableDialog(UpdateInfo info)
+    /// Offers the update: in-app download+install when this is an installed
+    /// copy (InstallDetector.IsInstalled) and the release actually published
+    /// a *-setup.exe asset, otherwise falls back to the original
+    /// open-the-release-page behavior (portable zip installs, or a release
+    /// that only published a zip).
+    private async Task TryUpdateAsync(UpdateInfo info)
     {
         var notes = string.IsNullOrWhiteSpace(info.ReleaseNotes) ? "(no patch notes provided)" : info.ReleaseNotes;
+        bool canAutoUpdate = info.InstallerAssetUrl is not null && InstallDetector.IsInstalled(AppContext.BaseDirectory);
+
         var result = MessageBox.Show(
-            $"Version {info.Version} is available.\n\n{notes}\n\nOpen the release page?",
+            $"Version {info.Version} is available.\n\n{notes}\n\n{(canAutoUpdate ? "Download and install now?" : "Open the release page?")}",
             "Update Available", MessageBoxButton.YesNo, MessageBoxImage.Information);
-        if (result != MessageBoxResult.Yes || string.IsNullOrEmpty(info.HtmlUrl)) return;
+        if (result != MessageBoxResult.Yes) return;
+
+        if (!canAutoUpdate)
+        {
+            OpenReleasePage(info.HtmlUrl);
+            return;
+        }
+
+        await DownloadAndInstallAsync(info);
+    }
+
+    private static void OpenReleasePage(string htmlUrl)
+    {
+        if (string.IsNullOrEmpty(htmlUrl)) return;
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(info.HtmlUrl) { UseShellExecute = true });
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(htmlUrl) { UseShellExecute = true });
         }
         catch { /* best effort; nothing sensible to do if the browser won't launch */ }
+    }
+
+    /// Downloads the installer, confirms once more, then hands off to it and
+    /// exits. The spawned command waits 2s before running the installer so
+    /// our own Shutdown() below has time to fully release LogiBuddy.exe's
+    /// file lock before Inno tries to overwrite it — installer.iss's [Run]
+    /// section (skipifsilent removed) relaunches the app once install
+    /// finishes.
+    private async Task DownloadAndInstallAsync(UpdateInfo info)
+    {
+        var installerPath = Path.Combine(Path.GetTempPath(), "LogiBuddy-update-setup.exe");
+        StatusMessage = $"Downloading update v{info.Version}...";
+        try
+        {
+            await _updateDownloader.DownloadAsync(info.InstallerAssetUrl!, installerPath);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Couldn't download the update: {ex.Message}";
+            MessageBox.Show($"Couldn't download the update: {ex.Message}", "Update Failed",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        StatusMessage = "";
+
+        var confirm = MessageBox.Show(
+            $"Ready to install v{info.Version} — the app will close, update, and reopen. Continue?",
+            "Install Update", MessageBoxButton.YesNo, MessageBoxImage.Information);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c timeout /t 2 /nobreak >nul && \"{installerPath}\" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Couldn't launch the installer: {ex.Message}", "Update Failed",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        Application.Current.Shutdown();
     }
 
     /// Reads the version .csproj/package.ps1 stamp onto the assembly

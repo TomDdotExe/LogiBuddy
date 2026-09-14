@@ -46,7 +46,25 @@ public class GitHubUpdateChecker : IUpdateChecker
 
         var notes = root.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "";
         var htmlUrl = root.TryGetProperty("html_url", out var urlProp) ? urlProp.GetString() ?? "" : "";
-        return new UpdateInfo(tagName.TrimStart('v', 'V'), notes, htmlUrl);
+        var installerAssetUrl = FindInstallerAssetUrl(root);
+        return new UpdateInfo(tagName.TrimStart('v', 'V'), notes, htmlUrl, installerAssetUrl);
+    }
+
+    /// Finds the download URL of the release asset produced by
+    /// build/make-installer.ps1 (OutputBaseFilename ends "-setup"), or null
+    /// if the release has no such asset (e.g. zip-only).
+    private static string? FindInstallerAssetUrl(JsonElement root)
+    {
+        if (!root.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
+
+        foreach (var asset in assets.EnumerateArray())
+        {
+            var name = asset.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
+            if (name is null || !name.EndsWith("-setup.exe", StringComparison.OrdinalIgnoreCase)) continue;
+
+            return asset.TryGetProperty("browser_download_url", out var urlProp) ? urlProp.GetString() : null;
+        }
+        return null;
     }
 
     /// True if latestTag (e.g. "v1.2.0" or "1.2.0") parses to a version
